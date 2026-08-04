@@ -74,17 +74,17 @@ npm run tauri:build
 
 ## Docker Web 部署
 
-构建并启动：
+直接运行 GitHub Container Registry 中的正式镜像：
+
+```powershell
+docker pull ghcr.io/fantasy-ke/worktools:latest
+docker run -d --name worktools-web --restart unless-stopped -p 8080:80 ghcr.io/fantasy-ke/worktools:latest
+```
+
+也可以从当前源码构建，并通过 Docker Compose 后台启动：
 
 ```powershell
 docker compose up --build -d
 ```
 
-默认访问 `http://localhost:8080`。容器日志目录会挂载到 `data/docker/nginx-logs/`。修改端口或覆盖静态资源的示例见 `docker/README.md`。
-
-单独构建镜像：
-
-```powershell
-docker build -t worktools-web:local .
-docker run --rm -p 8080:80 worktools-web:local
-```
+默认访问 `http://localhost:8080`。镜像标签选择、端口修改、日志挂载、更新、停止和故障排查等完整教程见 [`docker/README.md`](docker/README.md)。
