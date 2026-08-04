@@ -1,6 +1,6 @@
 name: Dev Build
 
-# 推送到 dev 分支后，并行构建 Windows、macOS 和 Docker 产物，最后统一发布。
+# 推送到 dev 分支后，先重建 dev-latest 标签和草稿 Release，再并行构建三个产物，最后统一发布。
 on:
   push:
     branches:
@@ -18,20 +18,72 @@ env:
   WINDOWS_TARGET: x86_64-pc-windows-msvc
 
 jobs:
-  build_windows:
-    name: Build Windows artifacts
-    runs-on: windows-latest
+  prepare:
+    name: Recreate dev tag and draft release
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     outputs:
       dev_version: ${{ steps.meta.outputs.dev_version }}
     steps:
-      - uses: actions/checkout@v4
-
       - name: Compute dev version
         id: meta
-        shell: pwsh
-        run: |
-          $shortSha = $env:GITHUB_SHA.Substring(0, 7)
-          "dev_version=dev-$shortSha" >> $env:GITHUB_OUTPUT
+        shell: bash
+        run: echo "dev_version=dev-${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+      - name: Recreate dev-latest tag and draft release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tag = "dev-latest";
+            const { owner, repo } = context.repo;
+
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+            const existingRelease = releases.find((release) => release.tag_name === tag);
+            if (existingRelease) {
+              await github.rest.repos.deleteRelease({
+                owner,
+                repo,
+                release_id: existingRelease.id,
+              });
+            }
+
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
+              await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+
+            await github.rest.git.createRef({
+              owner,
+              repo,
+              ref: `refs/tags/${tag}`,
+              sha: context.sha,
+            });
+
+            await github.rest.repos.createRelease({
+              owner,
+              repo,
+              tag_name: tag,
+              target_commitish: context.sha,
+              name: "worktools dev-latest",
+              body: "Build in progress. This draft will be published automatically.",
+              draft: true,
+              prerelease: true,
+            });
+
+  build_windows:
+    name: Build Windows artifacts
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -65,7 +117,7 @@ jobs:
       - name: Collect Windows and Web artifacts
         shell: pwsh
         env:
-          DEV_VERSION: ${{ steps.meta.outputs.dev_version }}
+          DEV_VERSION: ${{ needs.prepare.outputs.dev_version }}
         run: |
           $staging = Join-Path $PWD "release-staging"
           $bundleRoot = Join-Path $PWD "src-tauri\target\$env:WINDOWS_TARGET\release\bundle"
@@ -92,6 +144,7 @@ jobs:
 
   build_macos:
     name: Build macOS artifact
+    needs: prepare
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -118,10 +171,11 @@ jobs:
 
       - name: Collect macOS artifact
         shell: bash
+        env:
+          DEV_VERSION: ${{ needs.prepare.outputs.dev_version }}
         run: |
           staging="release-staging"
           bundle_root="src-tauri/target/release/bundle/dmg"
-          dev_version="dev-${GITHUB_SHA:0:7}"
           mkdir -p "$staging"
 
           dmg_count="$(find "$bundle_root" -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')"
@@ -131,7 +185,7 @@ jobs:
           fi
 
           dmg="$(find "$bundle_root" -maxdepth 1 -type f -name '*.dmg' | head -n 1)"
-          cp "$dmg" "$staging/${APP_NAME}-${dev_version}-macos-arm64.dmg"
+          cp "$dmg" "$staging/${APP_NAME}-${DEV_VERSION}-macos-arm64.dmg"
           ls -lh "$staging"
 
       - name: Upload macOS artifact
@@ -144,6 +198,7 @@ jobs:
 
   build_docker:
     name: Build Docker image
+    needs: prepare
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -170,6 +225,7 @@ jobs:
   publish:
     name: Publish dev artifacts and Docker image
     needs:
+      - prepare
       - build_windows
       - build_macos
       - build_docker
@@ -206,7 +262,7 @@ jobs:
       - name: Generate dev release notes
         shell: bash
         env:
-          DEV_VERSION: ${{ needs.build_windows.outputs.dev_version }}
+          DEV_VERSION: ${{ needs.prepare.outputs.dev_version }}
         run: |
           python3 .github/scripts/generate_changelog.py \
             --mode dev \
@@ -244,7 +300,7 @@ jobs:
         shell: bash
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEV_VERSION: ${{ needs.build_windows.outputs.dev_version }}
+          DEV_VERSION: ${{ needs.prepare.outputs.dev_version }}
         run: |
           local_image="${APP_NAME}-ci:${GITHUB_SHA}"
           image_name="ghcr.io/${GITHUB_REPOSITORY,,}"
@@ -259,48 +315,13 @@ jobs:
           echo "Immutable tag: $image_name:$DEV_VERSION" >> "$GITHUB_STEP_SUMMARY"
 
       # 仅在三个构建节点全部成功后重置 dev-latest。
-      - name: Delete previous dev-latest release and tag
-        uses: actions/github-script@v7
-        env:
-          TAG_NAME: dev-latest
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const tag = process.env.TAG_NAME;
-
-            try {
-              const release = await github.rest.repos.getReleaseByTag({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag,
-              });
-              await github.rest.repos.deleteRelease({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                release_id: release.data.id,
-              });
-            } catch (error) {
-              if (error.status !== 404) throw error;
-            }
-
-            try {
-              await github.rest.git.deleteRef({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                ref: `tags/${tag}`,
-              });
-            } catch (error) {
-              if (error.status !== 404) throw error;
-            }
-
       - name: Publish dev-latest pre-release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: dev-latest
           target_commitish: ${{ github.sha }}
           name: worktools dev-latest
           prerelease: true
-          draft: false
           make_latest: false
           body_path: release-notes.md
           files: release-assets/*

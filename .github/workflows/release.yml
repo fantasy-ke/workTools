@@ -1,6 +1,6 @@
 name: Release Build
 
-# 推送 v* 标签后，并行构建 Windows、macOS 和 Docker 产物，最后统一发布。
+# 推送 v* 标签后，先按当前提交重建标签和草稿 Release，再并行构建三个产物，最后统一发布。
 on:
   push:
     tags:
@@ -18,23 +18,86 @@ env:
   WINDOWS_TARGET: x86_64-pc-windows-msvc
 
 jobs:
-  build_windows:
-    name: Build Windows artifacts
-    runs-on: windows-latest
+  prepare:
+    name: Recreate release tag and draft release
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.meta.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-
       - name: Validate release tag
         id: meta
-        shell: pwsh
+        shell: bash
         run: |
-          $tag = $env:GITHUB_REF_NAME
-          if ($tag -notmatch '^v(\d+\.\d+\.\d+)$') {
-            throw "Release tag must match vX.Y.Z, got '$tag'."
-          }
-          "version=$($Matches[1])" >> $env:GITHUB_OUTPUT
+          if [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "Release tag must match vX.Y.Z, got '$GITHUB_REF_NAME'." >&2
+            exit 1
+          fi
+
+      - name: Recreate tag and draft release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tag = context.ref.replace("refs/tags/", "");
+            const { owner, repo } = context.repo;
+
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+            const existingRelease = releases.find((release) => release.tag_name === tag);
+            if (existingRelease) {
+              await github.rest.repos.deleteRelease({
+                owner,
+                repo,
+                release_id: existingRelease.id,
+              });
+            }
+
+            let tagTargetSha = context.sha;
+            try {
+              const existingTag = await github.rest.git.getRef({
+                owner,
+                repo,
+                ref: `tags/${tag}`,
+              });
+              tagTargetSha = existingTag.data.object.sha;
+              await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+
+            await github.rest.git.createRef({
+              owner,
+              repo,
+              ref: `refs/tags/${tag}`,
+              sha: tagTargetSha,
+            });
+
+            await github.rest.repos.createRelease({
+              owner,
+              repo,
+              tag_name: tag,
+              target_commitish: context.sha,
+              name: `worktools ${tag}`,
+              body: "Build in progress. This draft will be published automatically.",
+              draft: true,
+              prerelease: false,
+            });
+
+  build_windows:
+    name: Build Windows artifacts
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -58,7 +121,7 @@ jobs:
       - name: Sync release version
         shell: pwsh
         env:
-          VERSION: ${{ steps.meta.outputs.version }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           @'
           import fs from "node:fs";
@@ -106,7 +169,7 @@ jobs:
       - name: Collect Windows and Web artifacts
         shell: pwsh
         env:
-          VERSION: ${{ steps.meta.outputs.version }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           $staging = Join-Path $PWD "release-staging"
           $bundleRoot = Join-Path $PWD "src-tauri\target\$env:WINDOWS_TARGET\release\bundle"
@@ -133,19 +196,14 @@ jobs:
 
   build_macos:
     name: Build macOS artifact
+    needs: prepare
     runs-on: macos-15
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Validate release tag
-        shell: bash
-        run: |
-          if [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-            echo "VERSION=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
-          else
-            echo "Release tag must match vX.Y.Z, got '$GITHUB_REF_NAME'." >&2
-            exit 1
-          fi
+        with:
+          ref: ${{ github.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -230,9 +288,12 @@ jobs:
 
   build_docker:
     name: Build Docker image
+    needs: prepare
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
 
       - name: Build Docker image
         run: docker build --tag "${APP_NAME}-ci:${GITHUB_SHA}" .
@@ -256,6 +317,7 @@ jobs:
   publish:
     name: Publish release artifacts and Docker image
     needs:
+      - prepare
       - build_windows
       - build_macos
       - build_docker
@@ -266,6 +328,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
           fetch-tags: true
 
@@ -334,12 +397,11 @@ jobs:
           echo "Latest tag: $image_name:latest" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: worktools ${{ github.ref_name }}
           prerelease: false
-          draft: false
           make_latest: true
           body_path: release-notes.md
           files: release-assets/*
