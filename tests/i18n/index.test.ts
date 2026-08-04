@@ -1,0 +1,13 @@
+import { describe, expect, it } from "vitest";
+import { translateForLanguage } from "../../src/i18n";
+
+describe("i18n", () => {
+  it("keeps Chinese source text in the Chinese locale", () => {
+    expect(translateForLanguage("批量对比", "zh-CN")).toBe("批量对比");
+  });
+
+  it("translates exact and interpolated UI text into English", () => {
+    expect(translateForLanguage("批量对比", "en-US")).toBe("Batch Compare");
+    expect(translateForLanguage("3 处差异", "en-US")).toBe("3 differences");
+  });
+});

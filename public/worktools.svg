@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">WorkTools</title>
+  <desc id="desc">API 报文工作台图标</desc>
+  <rect width="128" height="128" rx="28" fill="#1558c0"/>
+  <path d="M42 26 18 64l24 38" fill="none" stroke="#f8fbff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m86 26 24 38-24 38" fill="none" stroke="#f8fbff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M54 45h20M49 64h30M54 83h20" fill="none" stroke="#8de7ff" stroke-width="7" stroke-linecap="round"/>
+</svg>

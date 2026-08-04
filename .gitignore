@@ -1,0 +1,65 @@
+# Dependencies
+/node_modules/
+
+# Frontend build and test output
+/dist/
+/dist-ssr/
+/coverage/
+/.vite/
+*.tsbuildinfo
+
+# Tauri / Rust generated output
+/src-tauri/target/
+/src-tauri/gen/schemas/
+**/*.rs.bk
+
+# Project-local runtime data (keep only directory conventions)
+/data/*
+!/data/README.md
+!/data/imports/
+/data/imports/*
+!/data/imports/.gitkeep
+!/data/exports/
+/data/exports/*
+!/data/exports/.gitkeep
+!/data/backups/
+/data/backups/*
+!/data/backups/.gitkeep
+!/data/docker/
+/data/docker/*
+!/data/docker/nginx-logs/
+/data/docker/nginx-logs/*
+!/data/docker/nginx-logs/.gitkeep
+
+# Environment and local configuration
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs, caches and temporary files
+/logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.cache/
+.tmp/
+/temp/
+/tmp/
+
+# Editor and OS files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.vs/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
