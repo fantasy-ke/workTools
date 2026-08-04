@@ -9,5 +9,7 @@ describe("i18n", () => {
   it("translates exact and interpolated UI text into English", () => {
     expect(translateForLanguage("批量对比", "en-US")).toBe("Batch Compare");
     expect(translateForLanguage("3 处差异", "en-US")).toBe("3 differences");
+    expect(translateForLanguage("配置处理", "en-US")).toBe("Configuration Processing");
+    expect(translateForLanguage("已替换 5 处符号", "en-US")).toBe("Replaced 5 delimiters");
   });
 });

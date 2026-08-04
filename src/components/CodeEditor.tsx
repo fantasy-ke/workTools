@@ -17,7 +17,11 @@ interface CodeEditorProps {
   readOnly?: boolean;
   label: string;
   highlights?: EditorHighlight[];
+  onEditorMount?: (editor: CodeEditorInstance) => void;
+  onEditorFocus?: () => void;
 }
+
+export type CodeEditorInstance = MonacoEditor.IStandaloneCodeEditor;
 
 function visualKind(kind: EditorHighlight["kind"]): "added" | "removed" | "changed" | "moved" {
   if (kind === "added" || kind === "removed" || kind === "moved") return kind;
@@ -35,9 +39,17 @@ export function CodeEditor({
   readOnly = false,
   label,
   highlights = [],
+  onEditorMount,
+  onEditorFocus,
 }: CodeEditorProps) {
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const decorationIdsRef = useRef<string[]>([]);
+  const focusListenerRef = useRef<{ dispose: () => void } | null>(null);
+  const onEditorMountRef = useRef(onEditorMount);
+  const onEditorFocusRef = useRef(onEditorFocus);
+
+  onEditorMountRef.current = onEditorMount;
+  onEditorFocusRef.current = onEditorFocus;
 
   const applyHighlights = useCallback((instance: MonacoEditor.IStandaloneCodeEditor) => {
     const decorations: MonacoEditor.IModelDeltaDecoration[] = highlights.map((highlight) => {
@@ -61,8 +73,11 @@ export function CodeEditor({
   }, [highlights]);
 
   const handleMount: OnMount = (instance) => {
+    focusListenerRef.current?.dispose();
     editorRef.current = instance;
     applyHighlights(instance);
+    focusListenerRef.current = instance.onDidFocusEditorText(() => onEditorFocusRef.current?.());
+    onEditorMountRef.current?.(instance);
   };
 
   useEffect(() => {
@@ -70,6 +85,8 @@ export function CodeEditor({
   }, [applyHighlights]);
 
   useEffect(() => () => {
+    focusListenerRef.current?.dispose();
+    focusListenerRef.current = null;
     editorRef.current = null;
     decorationIdsRef.current = [];
   }, []);

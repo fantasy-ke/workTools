@@ -7,6 +7,7 @@ import {
   Command,
   Copy,
   Files,
+  FileCog,
   FolderKanban,
   GitCompareArrows,
   Home,
@@ -53,6 +54,7 @@ function lazyPage<T extends object>(view: ViewId, load: () => Promise<{ default:
 const HomePage = lazyPage("home", async () => ({ default: (await import("./pages/HomePage")).HomePage }));
 const FormatPage = lazyPage("format", async () => ({ default: (await import("./pages/FormatPage")).FormatPage }));
 const DiffPage = lazyPage("diff", async () => ({ default: (await import("./pages/DiffPage")).DiffPage }));
+const ConfigPage = lazyPage("config", async () => ({ default: (await import("./pages/ConfigPage")).ConfigPage }));
 const CronPage = lazyPage("cron", async () => ({ default: (await import("./pages/CronPage")).CronPage }));
 const BatchPage = lazyPage("batch", async () => ({ default: (await import("./pages/BatchPage")).BatchPage }));
 const WorkspacesPage = lazyPage("workspaces", async () => ({ default: (await import("./pages/WorkspacesPage")).WorkspacesPage }));
@@ -64,6 +66,7 @@ function createViews(): Array<{ id: ViewId; label: string; icon: React.ReactNode
   { id: "home", label: t("首页"), icon: <Home />, section: "tools" },
   { id: "format", label: t("格式化"), icon: <Braces />, section: "tools" },
   { id: "diff", label: t("对比"), icon: <GitCompareArrows />, section: "tools" },
+  { id: "config", label: t("配置处理"), icon: <FileCog />, section: "tools" },
   { id: "cron", label: t("Cron 工具"), icon: <CalendarClock />, section: "tools" },
   { id: "batch", label: t("批量对比"), icon: <Files />, section: "tools" },
   { id: "workspaces", label: t("工作区"), icon: <FolderKanban />, section: "library" },
@@ -77,10 +80,11 @@ interface OpenTab {
   view: ViewId;
   name?: string;
   snapshot?: WorkspaceSnapshot;
+  workspaceId?: string;
 }
 
-function isMultiInstanceView(view: ViewId): view is "format" | "diff" {
-  return view === "format" || view === "diff";
+function isMultiInstanceView(view: ViewId): view is "format" | "diff" | "config" {
+  return view === "format" || view === "diff" || view === "config";
 }
 
 function cloneSnapshot(snapshot: WorkspaceSnapshot): WorkspaceSnapshot {
@@ -88,12 +92,13 @@ function cloneSnapshot(snapshot: WorkspaceSnapshot): WorkspaceSnapshot {
   return { ...snapshot };
 }
 
-function createOpenTab(view: ViewId, name?: string, snapshot?: WorkspaceSnapshot): OpenTab {
+function createOpenTab(view: ViewId, name?: string, snapshot?: WorkspaceSnapshot, workspaceId?: string): OpenTab {
   return {
     id: view === "home" ? "home" : createId(`tab-${view}`),
     view,
     name: name?.trim() || undefined,
     snapshot,
+    workspaceId,
   };
 }
 
@@ -224,12 +229,16 @@ export default function App() {
     setOpenTabs((current) => current.map((tab) => tab.id === tabId ? { ...tab, name: name.trim() || undefined } : tab));
   }, []);
 
+  const updateTabWorkspace = useCallback((tabId: string, workspace: WorkspaceRecord) => {
+    setOpenTabs((current) => current.map((tab) => tab.id === tabId ? { ...tab, name: workspace.name, workspaceId: workspace.id } : tab));
+  }, []);
+
   const openWorkspace = useCallback((workspace: WorkspaceRecord) => {
     const target: ViewId = workspace.snapshot.kind === "format" ? "format" : workspace.snapshot.kind === "diff" ? "diff" : "cron";
     const snapshot = cloneSnapshot(workspace.snapshot);
 
     if (isMultiInstanceView(target)) {
-      const tab = createOpenTab(target, workspace.name, snapshot);
+      const tab = createOpenTab(target, workspace.name, snapshot, workspace.id);
       setOpenTabs((current) => [...current, tab]);
       selectTab(tab);
       return;
@@ -237,13 +246,13 @@ export default function App() {
 
     const existing = openTabs.find((tab) => tab.view === target);
     if (existing) {
-      const updated = { ...existing, name: workspace.name, snapshot };
+      const updated = { ...existing, name: workspace.name, snapshot, workspaceId: workspace.id };
       setOpenTabs((current) => current.map((tab) => tab.id === existing.id ? updated : tab));
       selectTab(updated);
       return;
     }
 
-    const tab = createOpenTab(target, workspace.name, snapshot);
+    const tab = createOpenTab(target, workspace.name, snapshot, workspace.id);
     setOpenTabs((current) => [...current, tab]);
     selectTab(tab);
   }, [openTabs, selectTab]);
@@ -281,7 +290,7 @@ export default function App() {
         setPaletteOpen((value) => !value);
       }
       if (event.key === "Escape") setPaletteOpen(false);
-      if (event.altKey && /^[1-8]$/.test(event.key)) {
+      if (event.altKey && /^[1-9]$/.test(event.key)) {
         event.preventDefault();
         navigate(views[Number(event.key) - 1].id);
       }
@@ -299,9 +308,10 @@ export default function App() {
 
   const renderView = (tab: OpenTab) => {
     if (tab.view === "home") return <HomePage onNavigate={navigate} onOpenWorkspace={openWorkspace} />;
-    if (tab.view === "format") return <FormatPage snapshot={tab.snapshot} active={activeTabId === tab.id} onTitleChange={(name) => updateTabName(tab.id, name)} />;
-    if (tab.view === "diff") return <DiffPage snapshot={tab.snapshot} active={activeTabId === tab.id} onTitleChange={(name) => updateTabName(tab.id, name)} />;
-    if (tab.view === "cron") return <CronPage snapshot={tab.snapshot} active={activeTabId === tab.id} />;
+    if (tab.view === "format") return <FormatPage snapshot={tab.snapshot} workspaceId={tab.workspaceId} active={activeTabId === tab.id} onTitleChange={(name) => updateTabName(tab.id, name)} onWorkspaceSaved={(workspace) => updateTabWorkspace(tab.id, workspace)} />;
+    if (tab.view === "diff") return <DiffPage snapshot={tab.snapshot} workspaceId={tab.workspaceId} active={activeTabId === tab.id} onTitleChange={(name) => updateTabName(tab.id, name)} onWorkspaceSaved={(workspace) => updateTabWorkspace(tab.id, workspace)} />;
+    if (tab.view === "config") return <ConfigPage active={activeTabId === tab.id} />;
+    if (tab.view === "cron") return <CronPage snapshot={tab.snapshot} workspaceId={tab.workspaceId} active={activeTabId === tab.id} onWorkspaceSaved={(workspace) => updateTabWorkspace(tab.id, workspace)} />;
     if (tab.view === "batch") return <BatchPage />;
     if (tab.view === "workspaces") return <WorkspacesPage onOpen={openWorkspace} />;
     if (tab.view === "help") return <HelpPage />;
@@ -359,7 +369,7 @@ export default function App() {
           );
         })}
         <span className="task-tabs-spacer" />
-        <span className="task-shortcut-hint">{t("Alt 1–8 快速打开")}</span>
+        <span className="task-shortcut-hint">{t("Alt 1–9 快速打开")}</span>
       </div>
 
       <aside className={`side-nav ${navOpen ? "open" : ""}`}>

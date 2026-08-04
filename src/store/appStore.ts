@@ -33,6 +33,7 @@ interface AppState extends AppPersistedData {
   setView: (view: ViewId) => void;
   updateSettings: (patch: Partial<WorktoolsSettings>) => Promise<void>;
   saveWorkspace: (name: string, snapshot: WorkspaceSnapshot, sensitiveMode?: boolean) => Promise<WorkspaceRecord>;
+  updateWorkspace: (id: string, snapshot: WorkspaceSnapshot, sensitiveMode?: boolean) => Promise<WorkspaceRecord>;
   deleteWorkspace: (id: string) => Promise<void>;
   restoreWorkspace: (id: string) => Promise<void>;
   permanentlyDeleteWorkspace: (id: string) => Promise<void>;
@@ -94,6 +95,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     };
     await db.workspaces.put(record);
     set({ workspaces: [record, ...get().workspaces] });
+    return record;
+  },
+  updateWorkspace: async (id, snapshot, sensitiveMode = false) => {
+    const existing = get().workspaces.find((workspace) => workspace.id === id);
+    if (!existing) throw new Error("工作区不存在");
+    const record: WorkspaceRecord = {
+      ...existing,
+      type: snapshot.kind,
+      updatedAt: new Date().toISOString(),
+      sensitiveMode,
+      snapshot,
+    };
+    await db.workspaces.put(record);
+    set({ workspaces: [record, ...get().workspaces.filter((workspace) => workspace.id !== id)] });
     return record;
   },
   deleteWorkspace: async (id) => {

@@ -709,6 +709,10 @@ input, textarea, select { font: inherit; color: inherit; }
 @media (max-width:1050px){.workspace-card-grid{grid-template-columns:repeat(2,1fr)}.format-layout,.diff-layout{grid-template-columns:minmax(0,1fr)}.format-side,.diff-options{border-left:0;border-top:1px solid var(--border);max-height:none}.batch-main{grid-template-columns:270px 1fr}.settings-content{padding-inline:20px}.mask-head,.mask-row{grid-template-columns:34px minmax(110px,1fr) 110px minmax(90px,1fr) 100px 34px}}
 @media (max-width:760px){.app-shell{grid-template-columns:1fr;grid-template-rows:52px 40px minmax(0,1fr) 24px}.app-bar{grid-column:1}.task-tabs{grid-column:1}.side-nav{position:fixed;left:0;top:52px;bottom:24px;z-index:90;width:232px;transform:translateX(-105%);box-shadow:12px 0 30px rgba(0,0,0,.16);transition:transform .18s ease}.side-nav.open{transform:translateX(0)}.workspace{grid-column:1}.status-bar{grid-column:1}.mobile-menu{display:inline-grid}.app-context,.local-status,.command-trigger span,.command-trigger kbd{display:none}.command-trigger{width:34px;padding:0;justify-content:center}.workspace-card-grid,.quick-grid,.stats-grid,.privacy-cards,.form-grid{grid-template-columns:1fr}.home-hero,.page-header,.settings-header{padding-inline:16px}.page-content,.settings-content{padding-inline:14px}.batch-main{grid-template-columns:1fr}.batch-side{max-height:260px;border-right:0;border-bottom:1px solid var(--border)}.settings-layout{grid-template-columns:1fr}.settings-nav{display:flex;gap:4px;overflow:auto;border-right:0;border-bottom:1px solid var(--border)}.settings-nav button{min-width:max-content;margin:0}.theme-options{grid-template-columns:1fr}.mask-table{overflow:auto}.mask-head,.mask-row{min-width:760px}.danger-zone{align-items:flex-start;flex-direction:column}.editor-split{grid-template-columns:1fr}.cron-layout{grid-template-columns:1fr}.cron-side{border-left:0;border-top:1px solid var(--border)}}
 
+/* Monaco 查找按钮提示保持单行并允许越过编辑器容器，避免遮挡关闭按钮。 */
+.code-editor:has(.context-view.monaco-component){overflow:visible}
+.monaco-hover.workbench-hover.compact .hover-contents{white-space:nowrap!important}
+
 /* Monaco diff position highlights */
 .monaco-editor .worktools-diff-added-line{background:var(--diff-added-bg);box-shadow:inset 3px 0 0 var(--success)}
 .monaco-editor .worktools-diff-removed-line{background:var(--diff-removed-bg);box-shadow:inset 3px 0 0 var(--danger)}
@@ -830,4 +834,23 @@ input, textarea, select { font: inherit; color: inherit; }
 .window-control-close:hover{background:#c42b1c;color:#fff}
 
 .toolbar-dropdown-end .toolbar-dropdown-menu{right:0;left:auto}
-
+/* 配置处理页 */
+.config-page{overflow:hidden}
+.config-toolbar{flex:0 0 auto}
+.config-mode-switch button{display:inline-flex;align-items:center;gap:6px}
+.config-mode-switch svg{width:14px;height:14px}
+.delimiter-preset{max-width:210px}
+.delimiter-token-field{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+.delimiter-token-field .field-input{width:76px;font-family:var(--font-mono)}
+.config-status{min-height:38px;display:flex;align-items:center;gap:12px;padding:6px 12px;border-bottom:1px solid var(--border);background:var(--border-soft);color:var(--muted);font-size:12px;flex-wrap:wrap}
+.config-status>span{display:inline-flex;align-items:center;gap:6px}
+.config-status>span:first-child{color:var(--fg-2);font-weight:500}
+.config-status svg{width:15px;height:15px;color:var(--accent)}
+.config-status code{padding:2px 7px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--accent);font-family:var(--font-mono)}
+.config-editor-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);flex:1;min-height:0}
+.config-editor-grid .editor-panel:first-child{border-right:1px solid var(--border)}
+.config-editor-grid .panel-actions .badge{gap:4px}
+.config-editor-grid .panel-actions svg{width:13px;height:13px}
+.config-footer-note{min-height:30px;display:flex;align-items:center;gap:7px;padding:5px 12px;border-top:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:11px}
+.config-footer-note svg{width:13px;height:13px}
+@media (max-width:900px){.config-editor-grid{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) minmax(0,1fr)}.config-editor-grid .editor-panel:first-child{border-right:0;border-bottom:1px solid var(--border)}.delimiter-token-field .field-input{width:64px}}

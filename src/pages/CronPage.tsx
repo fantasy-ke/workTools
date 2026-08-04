@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock, CheckCircle2, Clipboard, Clock3, RotateCcw, Save, WandSparkles } from "lucide-react";
-import type { CronDialect, CronFieldModel, WorkspaceSnapshot } from "../types";
+import type { CronDialect, CronFieldModel, WorkspaceRecord, WorkspaceSnapshot } from "../types";
 import { Badge, Button, EmptyState, Field } from "../components/ui";
 import { useToast } from "../components/Toast";
 import { useAppStore } from "../store/appStore";
 import { analyzeCron, buildCronExpression, CRON_PRESETS, defaultCronExpression } from "../core/cron";
-import { useWorkspaceSaveShortcut } from "../hooks/useWorkspaceSaveShortcut";
+import { saveWorkspaceTarget, useWorkspaceSaveShortcut } from "../hooks/useWorkspaceSaveShortcut";
 import { translate as t } from "../i18n";
 
 const TIMEZONES = ["Asia/Shanghai", "UTC", "Asia/Tokyo", "Europe/London", "America/New_York", "America/Los_Angeles"];
@@ -15,14 +15,18 @@ function createFieldHelp(): Record<keyof CronFieldModel, string> {
   };
 }
 
-export function CronPage({ snapshot, active = false }: { snapshot?: WorkspaceSnapshot; active?: boolean }) {
+export function CronPage({ snapshot, workspaceId, active = false, onWorkspaceSaved }: { snapshot?: WorkspaceSnapshot; workspaceId?: string; active?: boolean; onWorkspaceSaved?: (workspace: WorkspaceRecord) => void }) {
   const fieldHelp = createFieldHelp();
   const saveWorkspace = useAppStore((state) => state.saveWorkspace);
+  const updateWorkspace = useAppStore((state) => state.updateWorkspace);
   const language = useAppStore((state) => state.settings.language);
   const { notify } = useToast();
   const [dialect, setDialect] = useState<CronDialect>("unix");
   const [expression, setExpression] = useState("*/5 * * * *");
   const [timezone, setTimezone] = useState("Asia/Shanghai");
+  const workspaceIdRef = useRef(workspaceId);
+
+  useEffect(() => { workspaceIdRef.current = workspaceId; }, [workspaceId]);
 
   useEffect(() => {
     if (snapshot?.kind === "cron") { setDialect(snapshot.dialect); setExpression(snapshot.expression); setTimezone(snapshot.timezone); }
@@ -33,7 +37,19 @@ export function CronPage({ snapshot, active = false }: { snapshot?: WorkspaceSna
     if (!analysis.model) return;
     setExpression(buildCronExpression({ ...analysis.model, [key]: value || "*" }, dialect));
   };
-  const saveCurrent = async () => { const name = window.prompt(t("工作区名称"), `Cron ${expression}`); if (!name) return; await saveWorkspace(name, { kind: "cron", dialect, expression, timezone }); notify(t("Cron 工作区已保存")); };
+  const saveCurrent = async () => {
+    const saved = await saveWorkspaceTarget({
+      workspaceId: workspaceIdRef.current,
+      snapshot: { kind: "cron", dialect, expression, timezone },
+      requestName: () => window.prompt(t("工作区名称"), `Cron ${expression}`),
+      createWorkspace: saveWorkspace,
+      updateWorkspace,
+    });
+    if (!saved) return;
+    workspaceIdRef.current = saved.id;
+    onWorkspaceSaved?.(saved);
+    notify(t("Cron 工作区已保存"));
+  };
   useWorkspaceSaveShortcut(active, saveCurrent);
   const formatRun = (date: Date) => new Intl.DateTimeFormat(language, { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(date);
 
