@@ -1,0 +1,184 @@
+name: Dev Build
+
+# 推送到 dev 分支后，构建 Web/PWA 与 Windows x64 安装包，并覆盖 dev-latest 预发布版本。
+on:
+  push:
+    branches:
+      - dev
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  APP_NAME: worktools
+  TARGET: x86_64-pc-windows-msvc
+
+jobs:
+  build:
+    name: Test and build dev artifacts
+    runs-on: windows-latest
+    outputs:
+      dev_version: ${{ steps.meta.outputs.dev_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute dev version
+        id: meta
+        shell: pwsh
+        run: |
+          $shortSha = $env:GITHUB_SHA.Substring(0, 7)
+          "dev_version=dev-$shortSha" >> $env:GITHUB_OUTPUT
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.TARGET }}
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Run frontend tests
+        run: npm test
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      # tauri.conf.json 的 beforeBuildCommand 会执行 npm run build，同时生成 Web/PWA dist。
+      - name: Build Web and Windows app
+        run: npm run tauri:build
+
+      - name: Collect artifacts
+        shell: pwsh
+        env:
+          DEV_VERSION: ${{ steps.meta.outputs.dev_version }}
+        run: |
+          $staging = Join-Path $PWD "release-staging"
+          $bundleRoot = Join-Path $PWD "src-tauri\target\$env:TARGET\release\bundle"
+          New-Item -ItemType Directory -Force -Path $staging | Out-Null
+
+          $msi = @(Get-ChildItem -LiteralPath (Join-Path $bundleRoot "msi") -Filter "*.msi" -File)
+          $nsis = @(Get-ChildItem -LiteralPath (Join-Path $bundleRoot "nsis") -Filter "*-setup.exe" -File)
+          if ($msi.Count -ne 1) { throw "Expected one MSI artifact, found $($msi.Count)." }
+          if ($nsis.Count -ne 1) { throw "Expected one NSIS artifact, found $($nsis.Count)." }
+          if (-not (Test-Path -LiteralPath "dist\index.html")) { throw "Web dist is missing." }
+
+          Copy-Item -LiteralPath $msi[0].FullName -Destination (Join-Path $staging "$env:APP_NAME-$env:DEV_VERSION-windows-x64.msi")
+          Copy-Item -LiteralPath $nsis[0].FullName -Destination (Join-Path $staging "$env:APP_NAME-$env:DEV_VERSION-windows-x64-setup.exe")
+          Compress-Archive -Path "dist\*" -DestinationPath (Join-Path $staging "$env:APP_NAME-$env:DEV_VERSION-web.zip") -Force
+          Get-ChildItem -LiteralPath $staging | Format-Table Name, Length
+
+      - name: Upload dev artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-build-windows-x64
+          path: release-staging/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish dev-latest pre-release
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Download dev artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dev-build-windows-x64
+          path: release-assets
+
+      - name: Install changelog dependency
+        run: python3 -m pip install --disable-pip-version-check --quiet PyYAML==6.0.3
+
+      - name: Generate dev release notes
+        env:
+          DEV_VERSION: ${{ needs.build.outputs.dev_version }}
+        run: |
+          python3 .github/scripts/generate_changelog.py \
+            --mode dev \
+            --current-ref "$GITHUB_SHA" \
+            --intro "自动化开发构建，仅供测试，请勿用于生产环境。" \
+            --output release-notes.md
+          BUILD_TIME="$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')"
+          cat >> release-notes.md <<EOF
+
+          ---
+
+          | 项 | 值 |
+          |---|---|
+          | 版本 | \`${DEV_VERSION}\` |
+          | 分支 | \`dev\` |
+          | 提交 | [\`${GITHUB_SHA}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}) |
+          | 构建时间（北京时间） | ${BUILD_TIME} |
+
+          > 此预发布版本会在下一次推送到 dev 分支时被覆盖。
+          EOF
+
+      - name: Generate SHA256SUMS
+        shell: bash
+        run: |
+          cd release-assets
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\0' \
+            | sort -z \
+            | xargs -0 -r sha256sum > SHA256SUMS
+          test -s SHA256SUMS
+          cat SHA256SUMS
+
+      # 仅在全部构建成功后重置 dev-latest，避免失败构建提前删除可用预发布版本。
+      - name: Reset dev-latest release and tag
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = 'dev-latest';
+            const { owner, repo } = context.repo;
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+            for (const release of releases.filter(item => item.tag_name === tag)) {
+              await github.rest.repos.deleteRelease({ owner, repo, release_id: release.id });
+            }
+            try {
+              await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` });
+            } catch (error) {
+              const message = String(error.response?.data?.message || error.message || '');
+              const missingRef = error.status === 404
+                || (error.status === 422 && message.includes('Reference does not exist'));
+              if (!missingRef) throw error;
+            }
+
+      - name: Publish dev pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dev-latest
+          name: worktools Dev Build (${{ needs.build.outputs.dev_version }})
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          draft: false
+          body_path: release-notes.md
+          files: release-assets/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

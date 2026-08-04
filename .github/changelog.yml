@@ -1,0 +1,28 @@
+categories:
+  - title: 新功能
+    prefixes:
+      - feat
+      - feature
+      - enhancement
+  - title: 问题修复
+    prefixes:
+      - fix
+      - bug
+  - title: 构建与流程
+    prefixes:
+      - build
+      - ci
+      - workflow
+      - chore
+  - title: 文档更新
+    prefixes:
+      - docs
+      - documentation
+  - title: 重构与优化
+    prefixes:
+      - refactor
+      - perf
+      - optimization
+  - title: 其他更新
+    prefixes:
+      - "*"

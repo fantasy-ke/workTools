@@ -1,0 +1,187 @@
+name: Release
+
+# 推送 vX.Y.Z tag 后，构建 Web/PWA 与 Windows x64 安装包，并发布正式 Release。
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  APP_NAME: worktools
+  TARGET: x86_64-pc-windows-msvc
+
+jobs:
+  build:
+    name: Test and build release artifacts
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate release tag
+        id: meta
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Release tag must use vX.Y.Z format, got $env:GITHUB_REF_NAME."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.TARGET }}
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # 正式构建临时同步四个版本面；只影响 CI 工作区，不回写仓库。
+      - name: Sync release version
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          @'
+          import fs from "node:fs";
+
+          const version = process.env.VERSION;
+          const readJson = (path) => JSON.parse(fs.readFileSync(path, "utf8"));
+          const writeJson = (path, value) => fs.writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+
+          const packageJson = readJson("package.json");
+          packageJson.version = version;
+          writeJson("package.json", packageJson);
+
+          const packageLock = readJson("package-lock.json");
+          packageLock.version = version;
+          packageLock.packages[""].version = version;
+          writeJson("package-lock.json", packageLock);
+
+          const tauriConfig = readJson("src-tauri/tauri.conf.json");
+          tauriConfig.version = version;
+          writeJson("src-tauri/tauri.conf.json", tauriConfig);
+
+          const cargoPath = "src-tauri/Cargo.toml";
+          const cargoToml = fs.readFileSync(cargoPath, "utf8");
+          const cargoVersionPattern = /^version = "\d+\.\d+\.\d+"/m;
+          if (!cargoVersionPattern.test(cargoToml)) {
+            throw new Error("src-tauri/Cargo.toml version was not found");
+          }
+          const updatedCargoToml = cargoToml.replace(
+            cargoVersionPattern,
+            `version = "${version}"`,
+          );
+          fs.writeFileSync(cargoPath, updatedCargoToml, "utf8");
+          '@ | node --input-type=module
+
+      - name: Run frontend tests
+        run: npm test
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      # tauri.conf.json 的 beforeBuildCommand 会执行 npm run build，同时生成 Web/PWA dist。
+      - name: Build Web and Windows app
+        run: npm run tauri:build
+
+      - name: Collect artifacts
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          $staging = Join-Path $PWD "release-staging"
+          $bundleRoot = Join-Path $PWD "src-tauri\target\$env:TARGET\release\bundle"
+          New-Item -ItemType Directory -Force -Path $staging | Out-Null
+
+          $msi = @(Get-ChildItem -LiteralPath (Join-Path $bundleRoot "msi") -Filter "*.msi" -File)
+          $nsis = @(Get-ChildItem -LiteralPath (Join-Path $bundleRoot "nsis") -Filter "*-setup.exe" -File)
+          if ($msi.Count -ne 1) { throw "Expected one MSI artifact, found $($msi.Count)." }
+          if ($nsis.Count -ne 1) { throw "Expected one NSIS artifact, found $($nsis.Count)." }
+          if (-not (Test-Path -LiteralPath "dist\index.html")) { throw "Web dist is missing." }
+
+          Copy-Item -LiteralPath $msi[0].FullName -Destination (Join-Path $staging "$env:APP_NAME-$env:VERSION-windows-x64.msi")
+          Copy-Item -LiteralPath $nsis[0].FullName -Destination (Join-Path $staging "$env:APP_NAME-$env:VERSION-windows-x64-setup.exe")
+          Compress-Archive -Path "dist\*" -DestinationPath (Join-Path $staging "$env:APP_NAME-$env:VERSION-web.zip") -Force
+          Get-ChildItem -LiteralPath $staging | Format-Table Name, Length
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build-windows-x64
+          path: release-staging/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish formal release
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-build-windows-x64
+          path: release-assets
+
+      - name: Install changelog dependency
+        run: python3 -m pip install --disable-pip-version-check --quiet PyYAML==6.0.3
+
+      - name: Generate release notes
+        run: |
+          python3 .github/scripts/generate_changelog.py \
+            --mode release \
+            --current-ref "$GITHUB_SHA" \
+            --current-tag "$GITHUB_REF_NAME" \
+            --intro "worktools 正式版本 ${GITHUB_REF_NAME}。" \
+            --output release-notes.md
+
+      - name: Generate SHA256SUMS
+        shell: bash
+        run: |
+          cd release-assets
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\0' \
+            | sort -z \
+            | xargs -0 -r sha256sum > SHA256SUMS
+          test -s SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: worktools ${{ github.ref_name }}
+          prerelease: false
+          draft: false
+          make_latest: true
+          body_path: release-notes.md
+          files: release-assets/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -184,7 +184,7 @@ docker build -t worktools-web:local .
 
 ## 13. Git 规范
 
-- 未经用户明确要求，不自动创建提交、推送、标签、版本发布或 Pull Request。
+- 未经用户明确要求，自动创建提交。
 - 提交前再次核对 `git status`，仅暂存当前任务的明确文件；避免使用 `git add .` 吸收无关修改。
 - 不得把用户已有未提交修改、业务报文、构建产物、日志、截图或调试文件混入提交。
 - 用户要求提交时使用 Conventional Commits，格式为 `<type>: <中文描述>`，例如：
