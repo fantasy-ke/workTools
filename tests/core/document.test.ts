@@ -34,6 +34,18 @@ describe("document core", () => {
     expect(first.text).not.toMatch(/\n\s*\n/);
   });
 
+  it("formats multiple XML documents separated by pipes", () => {
+    const source = '<?xml version="1.0"?><root><value>A|B</value></root> | <?xml version="1.0"?><root><value>C</value></root>';
+    const result = formatDocument(source, "xml");
+
+    expect(result.parsed.valid).toBe(true);
+    expect(result.text).toContain("<value>A|B</value>");
+    expect(result.text.split("\n|\n")).toHaveLength(2);
+    expect(result.text.split("\n|\n").every((block) => parseXmlDocument(block).valid)).toBe(true);
+    expect(parseXmlDocument(result.text).valid).toBe(true);
+    expect(formatDocument(result.text, "xml").text).toBe(result.text);
+  });
+
   it("adds one JSON escaping layer and can restore the original text", () => {
     const source = 'line 1\n"quoted"\\path';
     const escaped = escapeText(source);

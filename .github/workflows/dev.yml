@@ -1,6 +1,6 @@
 name: Dev Build
 
-# 推送到 dev 分支后，构建 Web/PWA 与 Windows x64 安装包，并覆盖 dev-latest 预发布版本。
+# 推送到 dev 分支后，并行构建 Windows、macOS 和 Docker 产物，最后统一发布。
 on:
   push:
     branches:
@@ -15,11 +15,11 @@ permissions:
 
 env:
   APP_NAME: worktools
-  TARGET: x86_64-pc-windows-msvc
+  WINDOWS_TARGET: x86_64-pc-windows-msvc
 
 jobs:
-  build:
-    name: Test and build dev artifacts
+  build_windows:
+    name: Build Windows artifacts
     runs-on: windows-latest
     outputs:
       dev_version: ${{ steps.meta.outputs.dev_version }}
@@ -42,7 +42,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ env.TARGET }}
+          targets: ${{ env.WINDOWS_TARGET }}
 
       - name: Cache Rust dependencies
         uses: swatinem/rust-cache@v2
@@ -58,17 +58,17 @@ jobs:
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
-      # tauri.conf.json 的 beforeBuildCommand 会执行 npm run build，同时生成 Web/PWA dist。
+      # Tauri 的 beforeBuildCommand 会同时生成 Web/PWA dist。
       - name: Build Web and Windows app
         run: npm run tauri:build
 
-      - name: Collect artifacts
+      - name: Collect Windows and Web artifacts
         shell: pwsh
         env:
           DEV_VERSION: ${{ steps.meta.outputs.dev_version }}
         run: |
           $staging = Join-Path $PWD "release-staging"
-          $bundleRoot = Join-Path $PWD "src-tauri\target\$env:TARGET\release\bundle"
+          $bundleRoot = Join-Path $PWD "src-tauri\target\$env:WINDOWS_TARGET\release\bundle"
           New-Item -ItemType Directory -Force -Path $staging | Out-Null
 
           $msi = @(Get-ChildItem -LiteralPath (Join-Path $bundleRoot "msi") -Filter "*.msi" -File)
@@ -82,7 +82,7 @@ jobs:
           Compress-Archive -Path "dist\*" -DestinationPath (Join-Path $staging "$env:APP_NAME-$env:DEV_VERSION-web.zip") -Force
           Get-ChildItem -LiteralPath $staging | Format-Table Name, Length
 
-      - name: Upload dev artifacts
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: dev-build-windows-x64
@@ -90,47 +90,142 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  build_macos:
+    name: Build macOS artifact
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build macOS DMG
+        run: npm run tauri -- build --bundles dmg
+
+      - name: Collect macOS artifact
+        shell: bash
+        run: |
+          staging="release-staging"
+          bundle_root="src-tauri/target/release/bundle/dmg"
+          dev_version="dev-${GITHUB_SHA:0:7}"
+          mkdir -p "$staging"
+
+          dmg_count="$(find "$bundle_root" -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')"
+          if [ "$dmg_count" -ne 1 ]; then
+            echo "Expected one DMG artifact, found $dmg_count." >&2
+            exit 1
+          fi
+
+          dmg="$(find "$bundle_root" -maxdepth 1 -type f -name '*.dmg' | head -n 1)"
+          cp "$dmg" "$staging/${APP_NAME}-${dev_version}-macos-arm64.dmg"
+          ls -lh "$staging"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-build-macos-arm64
+          path: release-staging/*
+          if-no-files-found: error
+          retention-days: 7
+
+  build_docker:
+    name: Build Docker image
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build --tag "${APP_NAME}-ci:${GITHUB_SHA}" .
+
+      - name: Export Docker image
+        shell: bash
+        run: |
+          mkdir -p docker-staging
+          docker save "${APP_NAME}-ci:${GITHUB_SHA}" | gzip -1 > docker-staging/worktools-image.tar.gz
+          test -s docker-staging/worktools-image.tar.gz
+          ls -lh docker-staging/worktools-image.tar.gz
+
+      - name: Upload Docker image
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-docker-image
+          path: docker-staging/worktools-image.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
   publish:
-    name: Publish dev-latest pre-release
-    needs: build
+    name: Publish dev artifacts and Docker image
+    needs:
+      - build_windows
+      - build_macos
+      - build_docker
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+      packages: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Download dev artifacts
+      - name: Download desktop artifacts
         uses: actions/download-artifact@v4
         with:
-          name: dev-build-windows-x64
+          pattern: dev-build-*
           path: release-assets
+          merge-multiple: true
+
+      - name: Download Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: dev-docker-image
+          path: docker-image
+
+      - name: Load Docker image
+        shell: bash
+        run: gzip -dc docker-image/worktools-image.tar.gz | docker load
 
       - name: Install changelog dependency
         run: python3 -m pip install --disable-pip-version-check --quiet PyYAML==6.0.3
 
       - name: Generate dev release notes
+        shell: bash
         env:
-          DEV_VERSION: ${{ needs.build.outputs.dev_version }}
+          DEV_VERSION: ${{ needs.build_windows.outputs.dev_version }}
         run: |
           python3 .github/scripts/generate_changelog.py \
             --mode dev \
             --current-ref "$GITHUB_SHA" \
-            --intro "自动化开发构建，仅供测试，请勿用于生产环境。" \
+            --intro "worktools dev 分支自动构建，包含 Windows、macOS 和 Docker 产物。" \
             --output release-notes.md
-          BUILD_TIME="$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')"
+          build_time="$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')"
+          image_name="ghcr.io/${GITHUB_REPOSITORY,,}"
           cat >> release-notes.md <<EOF
 
           ---
 
-          | 项 | 值 |
+          | 项目 | 值 |
           |---|---|
           | 版本 | \`${DEV_VERSION}\` |
           | 分支 | \`dev\` |
           | 提交 | [\`${GITHUB_SHA}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}) |
-          | 构建时间（北京时间） | ${BUILD_TIME} |
+          | 构建时间（北京时间） | ${build_time} |
+          | Docker 镜像 | \`${image_name}:dev-latest\` |
 
           > 此预发布版本会在下一次推送到 dev 分支时被覆盖。
           EOF
@@ -145,38 +240,68 @@ jobs:
           test -s SHA256SUMS
           cat SHA256SUMS
 
-      # 仅在全部构建成功后重置 dev-latest，避免失败构建提前删除可用预发布版本。
-      - name: Reset dev-latest release and tag
+      - name: Push Docker image to GHCR
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEV_VERSION: ${{ needs.build_windows.outputs.dev_version }}
+        run: |
+          local_image="${APP_NAME}-ci:${GITHUB_SHA}"
+          image_name="ghcr.io/${GITHUB_REPOSITORY,,}"
+
+          echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker tag "$local_image" "$image_name:dev-latest"
+          docker tag "$local_image" "$image_name:$DEV_VERSION"
+          docker push "$image_name:dev-latest"
+          docker push "$image_name:$DEV_VERSION"
+
+          echo "Docker image: $image_name:dev-latest" >> "$GITHUB_STEP_SUMMARY"
+          echo "Immutable tag: $image_name:$DEV_VERSION" >> "$GITHUB_STEP_SUMMARY"
+
+      # 仅在三个构建节点全部成功后重置 dev-latest。
+      - name: Delete previous dev-latest release and tag
         uses: actions/github-script@v7
+        env:
+          TAG_NAME: dev-latest
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const tag = 'dev-latest';
-            const { owner, repo } = context.repo;
-            const releases = await github.paginate(github.rest.repos.listReleases, {
-              owner,
-              repo,
-              per_page: 100,
-            });
-            for (const release of releases.filter(item => item.tag_name === tag)) {
-              await github.rest.repos.deleteRelease({ owner, repo, release_id: release.id });
-            }
+            const tag = process.env.TAG_NAME;
+
             try {
-              await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` });
+              const release = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag,
+              });
+              await github.rest.repos.deleteRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.data.id,
+              });
             } catch (error) {
-              const message = String(error.response?.data?.message || error.message || '');
-              const missingRef = error.status === 404
-                || (error.status === 422 && message.includes('Reference does not exist'));
-              if (!missingRef) throw error;
+              if (error.status !== 404) throw error;
             }
 
-      - name: Publish dev pre-release
+            try {
+              await github.rest.git.deleteRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${tag}`,
+              });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+
+      - name: Publish dev-latest pre-release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: dev-latest
-          name: worktools Dev Build (${{ needs.build.outputs.dev_version }})
           target_commitish: ${{ github.sha }}
+          name: worktools dev-latest
           prerelease: true
           draft: false
+          make_latest: false
           body_path: release-notes.md
           files: release-assets/*
           fail_on_unmatched_files: true

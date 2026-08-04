@@ -19,4 +19,15 @@ describe("masking core", () => {
     expect(JSON.parse(output)).toEqual({ users: [{ token: "ab***gh" }] });
     expect(source).toContain("secret");
   });
+
+  it("preserves pipe-separated XML blocks when masking exports", () => {
+    const source = "<root><password>first</password></root>|<root><password>second</password></root>";
+    const xmlRules: MaskRule[] = [
+      { id: "xml-password", path: "$.root.password", strategy: "remove", replacement: "***", enabled: true },
+    ];
+    const output = maskDocumentText(source, "xml", xmlRules);
+
+    expect(output.split("\n|\n")).toHaveLength(2);
+    expect(output).not.toContain("<password>");
+  });
 });

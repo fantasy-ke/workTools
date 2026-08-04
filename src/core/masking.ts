@@ -54,8 +54,11 @@ export function maskDocumentText(text: string, format: ResolvedFormat, rules: Ma
   if (format === "text") return text;
   const parsed = parseDocument(text, format);
   if (!parsed.valid) throw new Error(parsed.issues[0]?.message ?? "报文无效，无法脱敏");
+  const builder = new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: "@", textNodeName: "#text", cdataPropName: "#cdata", format: true, indentBy: "  " });
+  if (format === "xml" && Array.isArray(parsed.data)) {
+    return parsed.data.map((block) => builder.build(applyMaskRules(block, rules)).trim()).join("\n|\n");
+  }
   const masked = applyMaskRules(parsed.data, rules);
   if (format === "json") return JSON.stringify(masked, null, 2);
-  const builder = new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: "@", textNodeName: "#text", cdataPropName: "#cdata", format: true, indentBy: "  " });
   return builder.build(masked).trim();
 }

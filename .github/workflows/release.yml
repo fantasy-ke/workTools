@@ -1,6 +1,6 @@
-name: Release
+name: Release Build
 
-# 推送 vX.Y.Z tag 后，构建 Web/PWA 与 Windows x64 安装包，并发布正式 Release。
+# 推送 v* 标签后，并行构建 Windows、macOS 和 Docker 产物，最后统一发布。
 on:
   push:
     tags:
@@ -15,11 +15,11 @@ permissions:
 
 env:
   APP_NAME: worktools
-  TARGET: x86_64-pc-windows-msvc
+  WINDOWS_TARGET: x86_64-pc-windows-msvc
 
 jobs:
-  build:
-    name: Test and build release artifacts
+  build_windows:
+    name: Build Windows artifacts
     runs-on: windows-latest
     outputs:
       version: ${{ steps.meta.outputs.version }}
@@ -30,11 +30,11 @@ jobs:
         id: meta
         shell: pwsh
         run: |
-          $version = $env:GITHUB_REF_NAME -replace '^v', ''
-          if ($version -notmatch '^\d+\.\d+\.\d+$') {
-            throw "Release tag must use vX.Y.Z format, got $env:GITHUB_REF_NAME."
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+)$') {
+            throw "Release tag must match vX.Y.Z, got '$tag'."
           }
-          "version=$version" >> $env:GITHUB_OUTPUT
+          "version=$($Matches[1])" >> $env:GITHUB_OUTPUT
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -45,7 +45,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ env.TARGET }}
+          targets: ${{ env.WINDOWS_TARGET }}
 
       - name: Cache Rust dependencies
         uses: swatinem/rust-cache@v2
@@ -55,7 +55,6 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      # 正式构建临时同步四个版本面；只影响 CI 工作区，不回写仓库。
       - name: Sync release version
         shell: pwsh
         env:
@@ -87,11 +86,11 @@ jobs:
           if (!cargoVersionPattern.test(cargoToml)) {
             throw new Error("src-tauri/Cargo.toml version was not found");
           }
-          const updatedCargoToml = cargoToml.replace(
-            cargoVersionPattern,
-            `version = "${version}"`,
+          fs.writeFileSync(
+            cargoPath,
+            cargoToml.replace(cargoVersionPattern, `version = "${version}"`),
+            "utf8",
           );
-          fs.writeFileSync(cargoPath, updatedCargoToml, "utf8");
           '@ | node --input-type=module
 
       - name: Run frontend tests
@@ -100,17 +99,17 @@ jobs:
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
-      # tauri.conf.json 的 beforeBuildCommand 会执行 npm run build，同时生成 Web/PWA dist。
+      # Tauri 的 beforeBuildCommand 会同时生成 Web/PWA dist。
       - name: Build Web and Windows app
         run: npm run tauri:build
 
-      - name: Collect artifacts
+      - name: Collect Windows and Web artifacts
         shell: pwsh
         env:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
           $staging = Join-Path $PWD "release-staging"
-          $bundleRoot = Join-Path $PWD "src-tauri\target\$env:TARGET\release\bundle"
+          $bundleRoot = Join-Path $PWD "src-tauri\target\$env:WINDOWS_TARGET\release\bundle"
           New-Item -ItemType Directory -Force -Path $staging | Out-Null
 
           $msi = @(Get-ChildItem -LiteralPath (Join-Path $bundleRoot "msi") -Filter "*.msi" -File)
@@ -124,7 +123,7 @@ jobs:
           Compress-Archive -Path "dist\*" -DestinationPath (Join-Path $staging "$env:APP_NAME-$env:VERSION-web.zip") -Force
           Get-ChildItem -LiteralPath $staging | Format-Table Name, Length
 
-      - name: Upload release artifacts
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-build-windows-x64
@@ -132,28 +131,166 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  build_macos:
+    name: Build macOS artifact
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate release tag
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "VERSION=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
+          else
+            echo "Release tag must match vX.Y.Z, got '$GITHUB_REF_NAME'." >&2
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Sync release version
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+
+          const version = process.env.VERSION;
+          const readJson = (path) => JSON.parse(fs.readFileSync(path, "utf8"));
+          const writeJson = (path, value) => fs.writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+
+          const packageJson = readJson("package.json");
+          packageJson.version = version;
+          writeJson("package.json", packageJson);
+
+          const packageLock = readJson("package-lock.json");
+          packageLock.version = version;
+          packageLock.packages[""].version = version;
+          writeJson("package-lock.json", packageLock);
+
+          const tauriConfig = readJson("src-tauri/tauri.conf.json");
+          tauriConfig.version = version;
+          writeJson("src-tauri/tauri.conf.json", tauriConfig);
+
+          const cargoPath = "src-tauri/Cargo.toml";
+          const cargoToml = fs.readFileSync(cargoPath, "utf8");
+          const cargoVersionPattern = /^version = "\d+\.\d+\.\d+"/m;
+          if (!cargoVersionPattern.test(cargoToml)) {
+            throw new Error("src-tauri/Cargo.toml version was not found");
+          }
+          fs.writeFileSync(
+            cargoPath,
+            cargoToml.replace(cargoVersionPattern, `version = "${version}"`),
+            "utf8",
+          );
+          NODE
+
+      - name: Build macOS DMG
+        run: npm run tauri -- build --bundles dmg
+
+      - name: Collect macOS artifact
+        shell: bash
+        run: |
+          staging="release-staging"
+          bundle_root="src-tauri/target/release/bundle/dmg"
+          mkdir -p "$staging"
+
+          dmg_count="$(find "$bundle_root" -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')"
+          if [ "$dmg_count" -ne 1 ]; then
+            echo "Expected one DMG artifact, found $dmg_count." >&2
+            exit 1
+          fi
+
+          dmg="$(find "$bundle_root" -maxdepth 1 -type f -name '*.dmg' | head -n 1)"
+          cp "$dmg" "$staging/${APP_NAME}-${VERSION}-macos-arm64.dmg"
+          ls -lh "$staging"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build-macos-arm64
+          path: release-staging/*
+          if-no-files-found: error
+          retention-days: 7
+
+  build_docker:
+    name: Build Docker image
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build --tag "${APP_NAME}-ci:${GITHUB_SHA}" .
+
+      - name: Export Docker image
+        shell: bash
+        run: |
+          mkdir -p docker-staging
+          docker save "${APP_NAME}-ci:${GITHUB_SHA}" | gzip -1 > docker-staging/worktools-image.tar.gz
+          test -s docker-staging/worktools-image.tar.gz
+          ls -lh docker-staging/worktools-image.tar.gz
+
+      - name: Upload Docker image
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-docker-image
+          path: docker-staging/worktools-image.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
   publish:
-    name: Publish formal release
-    needs: build
+    name: Publish release artifacts and Docker image
+    needs:
+      - build_windows
+      - build_macos
+      - build_docker
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+      packages: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Download release artifacts
+      - name: Download desktop artifacts
         uses: actions/download-artifact@v4
         with:
-          name: release-build-windows-x64
+          pattern: release-build-*
           path: release-assets
+          merge-multiple: true
+
+      - name: Download Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: release-docker-image
+          path: docker-image
+
+      - name: Load Docker image
+        shell: bash
+        run: gzip -dc docker-image/worktools-image.tar.gz | docker load
 
       - name: Install changelog dependency
         run: python3 -m pip install --disable-pip-version-check --quiet PyYAML==6.0.3
 
       - name: Generate release notes
+        shell: bash
         run: |
           python3 .github/scripts/generate_changelog.py \
             --mode release \
@@ -161,6 +298,13 @@ jobs:
             --current-tag "$GITHUB_REF_NAME" \
             --intro "worktools 正式版本 ${GITHUB_REF_NAME}。" \
             --output release-notes.md
+          image_name="ghcr.io/${GITHUB_REPOSITORY,,}"
+          cat >> release-notes.md <<EOF
+
+          ---
+
+          Docker 镜像：\`${image_name}:${GITHUB_REF_NAME}\`
+          EOF
 
       - name: Generate SHA256SUMS
         shell: bash
@@ -171,6 +315,23 @@ jobs:
             | xargs -0 -r sha256sum > SHA256SUMS
           test -s SHA256SUMS
           cat SHA256SUMS
+
+      - name: Push Docker image to GHCR
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          local_image="${APP_NAME}-ci:${GITHUB_SHA}"
+          image_name="ghcr.io/${GITHUB_REPOSITORY,,}"
+
+          echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker tag "$local_image" "$image_name:$GITHUB_REF_NAME"
+          docker tag "$local_image" "$image_name:latest"
+          docker push "$image_name:$GITHUB_REF_NAME"
+          docker push "$image_name:latest"
+
+          echo "Docker image: $image_name:$GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "Latest tag: $image_name:latest" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish release
         uses: softprops/action-gh-release@v2

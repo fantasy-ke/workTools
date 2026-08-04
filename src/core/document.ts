@@ -133,7 +133,7 @@ function xmlDepth(text: string): number {
   return max;
 }
 
-export function parseXmlDocument(text: string): ParsedDocument {
+function parseSingleXmlDocument(text: string): ParsedDocument {
   if (XML_SECURITY_PATTERN.test(text)) {
     return {
       format: "xml",
@@ -173,6 +173,53 @@ export function parseXmlDocument(text: string): ParsedDocument {
       duplicatePaths: [],
     };
   }
+}
+
+interface PipeSeparatedXmlDocuments {
+  blocks: string[];
+  parsed: ParsedDocument;
+}
+
+function parsePipeSeparatedXmlDocuments(text: string): PipeSeparatedXmlDocuments | undefined {
+  if (!text.includes("|")) return undefined;
+
+  const fragments = text.split("|");
+  const blocks: string[] = [];
+  const parsedBlocks: ParsedDocument[] = [];
+  let current = fragments[0] ?? "";
+
+  for (let index = 1; index < fragments.length; index += 1) {
+    const candidate = current.trim();
+    const parsed = candidate ? parseSingleXmlDocument(candidate) : undefined;
+    if (parsed?.valid) {
+      blocks.push(candidate);
+      parsedBlocks.push(parsed);
+      current = fragments[index];
+    } else {
+      current += `|${fragments[index]}`;
+    }
+  }
+
+  const lastBlock = current.trim();
+  const lastParsed = lastBlock ? parseSingleXmlDocument(lastBlock) : undefined;
+  if (!lastParsed?.valid || blocks.length === 0) return undefined;
+
+  blocks.push(lastBlock);
+  parsedBlocks.push(lastParsed);
+  return {
+    blocks,
+    parsed: {
+      format: "xml",
+      valid: true,
+      data: parsedBlocks.map((item) => item.data),
+      issues: [],
+      duplicatePaths: [],
+    },
+  };
+}
+
+export function parseXmlDocument(text: string): ParsedDocument {
+  return parsePipeSeparatedXmlDocuments(text)?.parsed ?? parseSingleXmlDocument(text);
 }
 
 export function parseDocument(text: string, requested: ResolvedFormat): ParsedDocument {
@@ -218,8 +265,8 @@ function stripXmlFormattingWhitespace(value: unknown): unknown {
   return value;
 }
 
-export function formatXml(text: string, minify = false): { text: string; parsed: ParsedDocument } {
-  const parsed = parseXmlDocument(text);
+function formatSingleXml(text: string, minify = false): { text: string; parsed: ParsedDocument } {
+  const parsed = parseSingleXmlDocument(text);
   if (!parsed.valid) return { text, parsed };
   try {
     const ordered = stripXmlFormattingWhitespace(xmlOrderedParser.parse(text));
@@ -247,6 +294,20 @@ export function formatXml(text: string, minify = false): { text: string; parsed:
       },
     };
   }
+}
+
+export function formatXml(text: string, minify = false): { text: string; parsed: ParsedDocument } {
+  const separated = parsePipeSeparatedXmlDocuments(text);
+  if (!separated) return formatSingleXml(text, minify);
+
+  const formattedBlocks = separated.blocks.map((block) => formatSingleXml(block, minify));
+  const failed = formattedBlocks.find((result) => !result.parsed.valid);
+  if (failed) return { text, parsed: failed.parsed };
+
+  return {
+    text: formattedBlocks.map((result) => result.text).join(minify ? "|" : "\n|\n"),
+    parsed: separated.parsed,
+  };
 }
 
 export function formatDocument(text: string, format: ResolvedFormat, minify = false) {
