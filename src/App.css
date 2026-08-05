@@ -350,7 +350,7 @@ input, textarea, select { font: inherit; color: inherit; }
   font-family: var(--font-mono); font-size: 13px; line-height: 1.6;
   background: var(--bg); color: var(--fg); padding: var(--space-3); white-space: pre;
 }
-.line-numbers {
+.editor-row-wrap > .line-numbers {
   padding: var(--space-3) var(--space-2) var(--space-3) var(--space-3); text-align: right;
   color: var(--muted); font-family: var(--font-mono); font-size: 13px; line-height: 1.6;
   user-select: none; border-right: 1px solid var(--border-soft); background: var(--surface);
@@ -367,13 +367,18 @@ input, textarea, select { font: inherit; color: inherit; }
 .inspector-tabs button:hover { color: var(--fg); }
 .inspector-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
 .inspector-body { flex: 1; overflow: auto; padding: var(--space-3); }
+.tree-view { min-width: max-content; padding: var(--space-2) var(--space-3); }
 .tree-node { font-family: var(--font-mono); font-size: 13px; line-height: 1.7; }
-.tree-row { display: flex; align-items: center; gap: var(--space-1); padding: 1px 0; cursor: default; border-radius: 4px; }
+.tree-row { min-height: 24px; display: flex; align-items: center; gap: var(--space-1); padding: 1px 3px; cursor: default; border-radius: 4px; white-space: nowrap; }
 .tree-row:hover { background: var(--border-soft); }
-.tree-toggle { width: 14px; color: var(--muted); user-select: none; cursor: pointer; text-align: center; }
+.tree-toggle { flex: 0 0 18px; width: 18px; height: 18px; display: grid; place-items: center; padding: 0; color: var(--muted); background: transparent; border-radius: 4px; user-select: none; cursor: pointer; }
+.tree-toggle:hover { color: var(--fg); background: var(--surface); }
+.tree-toggle:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.tree-toggle svg { width: 13px; height: 13px; }
+.tree-toggle-placeholder { cursor: default; }
 .tree-key { color: var(--accent); }
 .tree-arr { color: var(--muted); }
-.tree-val { color: var(--fg-2); }
+.tree-val { max-width: 260px; overflow: hidden; color: var(--fg-2); text-overflow: ellipsis; }
 .tree-type-str { color: var(--success); }
 .tree-type-num { color: var(--diff-changed); }
 .tree-type-bool { color: var(--accent); }
