@@ -1,6 +1,7 @@
 import { loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor/editor/editor.api";
 import "monaco-editor/editor/contrib/find/browser/findController";
+import "monaco-editor/editor/contrib/folding/browser/folding";
 import "../node_modules/monaco-editor/esm/vs/base/browser/ui/codicons/codicon/codicon.css";
 import EditorWorker from "monaco-editor/editor/editor.worker?worker";
 

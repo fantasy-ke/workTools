@@ -37,7 +37,7 @@ afterEach(() => {
   host = null;
 });
 
-describe("Monaco find contribution", () => {
+describe("Monaco editor contributions", () => {
   it("registers the actions.find command used by the in-editor Ctrl+F shortcut", () => {
     host = document.createElement("div");
     document.body.append(host);
@@ -48,5 +48,19 @@ describe("Monaco find contribution", () => {
     });
 
     expect(editor.getAction("actions.find")).not.toBeNull();
+  });
+
+  it("registers the folding action used by the gutter folding controls", () => {
+    host = document.createElement("div");
+    document.body.append(host);
+    editor = monaco.editor.create(host, {
+      automaticLayout: false,
+      folding: true,
+      language: "json",
+      value: "{\n  \"hotel\": {\n    \"name\": \"example\"\n  }\n}",
+    });
+
+    expect(editor.getAction("editor.fold")).not.toBeNull();
+    expect(editor.getAction("editor.toggleFold")).not.toBeNull();
   });
 });
