@@ -113,6 +113,8 @@ export function CodeEditor({
           renderLineHighlight: "line",
           bracketPairColorization: { enabled: true },
           folding: true,
+          showFoldingControls: "always",
+          lineDecorationsWidth: 24,
           glyphMargin: false,
           padding: { top: 12, bottom: 12 },
           fixedOverflowWidgets: true,
