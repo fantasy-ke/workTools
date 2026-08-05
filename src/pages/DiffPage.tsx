@@ -12,7 +12,7 @@ import { detectFormat } from "../core/document";
 import { openTextFiles, saveTextFile } from "../platform/files";
 import { formatBytes } from "../utils";
 import { useMonacoFindShortcut } from "../hooks/useMonacoFindShortcut";
-import { saveWorkspaceTarget, useWorkspaceSaveShortcut } from "../hooks/useWorkspaceSaveShortcut";
+import { getWorkspaceSaveMessage, saveWorkspaceTarget, useWorkspaceSaveShortcut } from "../hooks/useWorkspaceSaveShortcut";
 import { translate as t } from "../i18n";
 
 const LEFT_SAMPLE = `{
@@ -99,19 +99,21 @@ export function DiffPage({ snapshot, workspaceId, active = false, onTitleChange,
   };
   const saveRules = async () => { const name = window.prompt(t("规则模板名称"), t("供应商报文对比规则")); if (!name) return; await saveRuleTemplate(name, options); notify(t("规则模板已保存")); };
   const saveCurrentWorkspace = async () => {
-    const saved = await saveWorkspaceTarget({
+    const result = await saveWorkspaceTarget({
       workspaceId: workspaceIdRef.current,
       snapshot: { kind: "diff", leftText, rightText, format, options, leftName, rightName },
       sensitiveMode: maskExport,
+      syncToLocalFile: settings.syncWorkspaceToLocalFile,
       requestName: () => window.prompt(t("工作区名称"), `${leftName} vs ${rightName}`),
       createWorkspace: saveWorkspace,
       updateWorkspace,
     });
-    if (!saved) return;
+    if (!result) return;
+    const saved = result.workspace;
     workspaceIdRef.current = saved.id;
     onTitleChange?.(saved.name);
     onWorkspaceSaved?.(saved);
-    notify(t("工作区已保存"));
+    notify(getWorkspaceSaveMessage(result, t));
   };
   useWorkspaceSaveShortcut(active, saveCurrentWorkspace);
   const updateOption = <K extends keyof DiffOptions>(key: K, value: DiffOptions[K]) => setOptions((current) => ({ ...current, [key]: value }));

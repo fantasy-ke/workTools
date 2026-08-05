@@ -3,7 +3,10 @@ import type { AppPersistedData, WorktoolsPackage } from "../types";
 
 const FORMAT = "worktools-apiwork-v1" as const;
 
-export function createWorktoolsPackage(data: AppPersistedData): WorktoolsPackage {
+type WorktoolsPackageInput = Pick<AppPersistedData, "workspaces" | "ruleTemplates" | "maskTemplates" | "baselines" | "recentFiles"> &
+  Partial<Pick<AppPersistedData, "settings">>;
+
+export function createWorktoolsPackage(data: WorktoolsPackageInput): WorktoolsPackage {
   return {
     format: FORMAT,
     exportedAt: new Date().toISOString(),

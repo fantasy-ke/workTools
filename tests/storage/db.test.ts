@@ -7,6 +7,8 @@ describe("settings defaults", () => {
     expect(applySettingsDefaults().language).toBe("zh-CN");
     expect(applySettingsDefaults({ theme: "dark" }).gpuAcceleration).toBe(true);
     expect(applySettingsDefaults({ language: "en-US" }).language).toBe("en-US");
+    expect(applySettingsDefaults().syncWorkspaceToLocalFile).toBe(false);
+    expect(applySettingsDefaults({ syncWorkspaceToLocalFile: true }).syncWorkspaceToLocalFile).toBe(true);
   });
 
   it("preserves an explicit disabled preference", () => {

@@ -14,6 +14,17 @@ describe("apiwork package", () => {
     expect(restored.workspaces).toEqual([]);
   });
 
+  it("creates a package for one workspace without requiring settings", () => {
+    const pkg = createWorktoolsPackage({
+      workspaces: [],
+      ruleTemplates: [],
+      maskTemplates: [],
+      baselines: [],
+      recentFiles: [],
+    });
+    expect(pkg.format).toBe("worktools-apiwork-v1");
+  });
+
   it("rejects unsupported package versions", () => {
     const bytes = new TextEncoder().encode(JSON.stringify({ format: "unknown", workspaces: [], ruleTemplates: [], maskTemplates: [], baselines: [], recentFiles: [] }));
     expect(() => importWorktoolsPackage(bytes)).toThrow();

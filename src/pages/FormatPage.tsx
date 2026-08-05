@@ -11,7 +11,7 @@ import { generateDocumentHtmlExport } from "../core/export";
 import { openTextFiles, saveTextFile } from "../platform/files";
 import { formatBytes } from "../utils";
 import { useMonacoFindShortcut } from "../hooks/useMonacoFindShortcut";
-import { saveWorkspaceTarget, useWorkspaceSaveShortcut } from "../hooks/useWorkspaceSaveShortcut";
+import { getWorkspaceSaveMessage, saveWorkspaceTarget, useWorkspaceSaveShortcut } from "../hooks/useWorkspaceSaveShortcut";
 import { translate as t } from "../i18n";
 import { DocumentTreeView } from "./format/DocumentTreeView";
 
@@ -118,19 +118,21 @@ export function FormatPage({ snapshot, workspaceId, active = false, onTitleChang
     } catch (error) { notify(error instanceof Error ? error.message : t("导出失败"), "error"); }
   };
   const saveCurrentWorkspace = async () => {
-    const saved = await saveWorkspaceTarget({
+    const result = await saveWorkspaceTarget({
       workspaceId: workspaceIdRef.current,
       snapshot: { kind: "format", text, format, sourceName },
       sensitiveMode: maskExport,
+      syncToLocalFile: settings.syncWorkspaceToLocalFile,
       requestName: () => window.prompt(t("工作区名称"), sourceName.replace(/\.[^.]+$/, "")),
       createWorkspace: saveWorkspace,
       updateWorkspace,
     });
-    if (!saved) return;
+    if (!result) return;
+    const saved = result.workspace;
     workspaceIdRef.current = saved.id;
     onTitleChange?.(saved.name);
     onWorkspaceSaved?.(saved);
-    notify(t("工作区已保存"));
+    notify(getWorkspaceSaveMessage(result, t));
   };
   useWorkspaceSaveShortcut(active, saveCurrentWorkspace);
 

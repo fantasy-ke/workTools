@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: WorktoolsSettings = {
   gpuAcceleration: true,
   temporaryByDefault: true,
   rememberRecentFiles: true,
+  syncWorkspaceToLocalFile: false,
   maxLiveBytes: 5 * 1024 * 1024,
   defaultDiffOptions: { ...DEFAULT_DIFF_OPTIONS },
 };
@@ -34,6 +35,12 @@ export function applySettingsDefaults(value?: Partial<WorktoolsSettings>): Workt
 
 interface SettingsRow { id: "settings"; value: WorktoolsSettings }
 
+export interface LocalWorkspaceSyncRow {
+  id: "workspace-directory";
+  directoryName: string;
+  directoryHandle: FileSystemDirectoryHandle;
+}
+
 class WorktoolsDb extends Dexie {
   workspaces!: Table<WorkspaceRecord, string>;
   ruleTemplates!: Table<RuleTemplate, string>;
@@ -41,6 +48,7 @@ class WorktoolsDb extends Dexie {
   baselines!: Table<StructureBaseline, string>;
   recentFiles!: Table<RecentFile, string>;
   settings!: Table<SettingsRow, string>;
+  localWorkspaceSync!: Table<LocalWorkspaceSyncRow, string>;
 
   constructor() {
     super("worktools-db");
@@ -51,6 +59,15 @@ class WorktoolsDb extends Dexie {
       baselines: "id, format, createdAt",
       recentFiles: "id, openedAt, name",
       settings: "id",
+    });
+    this.version(2).stores({
+      workspaces: "id, type, pinned, updatedAt",
+      ruleTemplates: "id, createdAt",
+      maskTemplates: "id, createdAt",
+      baselines: "id, format, createdAt",
+      recentFiles: "id, openedAt, name",
+      settings: "id",
+      localWorkspaceSync: "id",
     });
   }
 }
@@ -73,6 +90,22 @@ export async function loadPersistedData(): Promise<AppPersistedData & { recycled
 
 export async function saveSettings(value: WorktoolsSettings): Promise<void> {
   await db.settings.put({ id: "settings", value });
+}
+
+export async function loadLocalWorkspaceSync(): Promise<LocalWorkspaceSyncRow | undefined> {
+  return db.localWorkspaceSync.get("workspace-directory");
+}
+
+export async function saveLocalWorkspaceSync(directoryHandle: FileSystemDirectoryHandle): Promise<void> {
+  await db.localWorkspaceSync.put({
+    id: "workspace-directory",
+    directoryName: directoryHandle.name,
+    directoryHandle,
+  });
+}
+
+export async function clearLocalWorkspaceSync(): Promise<void> {
+  await db.localWorkspaceSync.delete("workspace-directory");
 }
 
 export async function replacePersistedData(data: Omit<AppPersistedData, "settings">): Promise<void> {

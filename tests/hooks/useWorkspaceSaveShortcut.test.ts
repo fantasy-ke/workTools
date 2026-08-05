@@ -60,7 +60,7 @@ describe("useWorkspaceSaveShortcut", () => {
     let snapshot = firstSnapshot;
     const saveCurrent = vi.fn(async () => {
       const saved = await saveWorkspaceTarget({ workspaceId, requestName, snapshot, createWorkspace, updateWorkspace });
-      workspaceId = saved?.id;
+      workspaceId = saved?.workspace.id;
     });
     renderHook(() => useWorkspaceSaveShortcut(true, saveCurrent));
 
