@@ -51,10 +51,10 @@ export function ConfigPage({ active = false }: { active?: boolean }) {
   const settings = useAppStore((state) => state.settings);
   const { notify } = useToast();
   const [mode, setMode] = useState<ConfigMode>("apollo");
-  const [direction, setDirection] = useState<ConvertDirection>("apollo-to-json");
+  const [direction, setDirection] = useState<ConvertDirection>("json-to-apollo");
   const [pathSeparator, setPathSeparator] = useState<ConfigPathSeparator>(":");
-  const [apolloInput, setApolloInput] = useState(APOLLO_SAMPLE);
-  const [apolloOutput, setApolloOutput] = useState(JSON_SAMPLE);
+  const [apolloInput, setApolloInput] = useState(JSON_SAMPLE);
+  const [apolloOutput, setApolloOutput] = useState(APOLLO_SAMPLE);
   const [delimiterInput, setDelimiterInput] = useState(DELIMITER_SAMPLE);
   const [delimiterOutput, setDelimiterOutput] = useState(DELIMITER_SAMPLE.replaceAll(",", "|"));
   const [presetId, setPresetId] = useState<DelimiterPresetId>("comma-to-pipe");
