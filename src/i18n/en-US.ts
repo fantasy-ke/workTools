@@ -391,6 +391,7 @@ export const enUS: Record<string, string> = {
   "数组关键字段": "Array key field",
   "双击“格式化”或“对比”。": "Double-click \"Format\" or \"Compare\".",
   "双击菜单": "Double-click menu",
+  "双击可新建多个标签": "Double-click for more tabs",
   "顺序比较 / 忽略顺序 / 按关键字段匹配。": "Order comparison / Ignore order / Match by key field.",
   "说明": "illustrate",
   "搜索工具或命令": "Search tools or commands",

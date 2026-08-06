@@ -859,3 +859,8 @@ input, textarea, select { font: inherit; color: inherit; }
 .config-footer-note{min-height:30px;display:flex;align-items:center;gap:7px;padding:5px 12px;border-top:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:11px}
 .config-footer-note svg{width:13px;height:13px}
 @media (max-width:900px){.config-editor-grid{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) minmax(0,1fr)}.config-editor-grid .editor-panel:first-child{border-right:0;border-bottom:1px solid var(--border)}.delimiter-token-field .field-input{width:64px}}
+
+/* 格式化与对比菜单提示双击可创建多个独立标签。 */
+.side-nav nav button .nav-item-label{display:flex;flex:1;min-width:0;flex-direction:column;gap:2px}
+.side-nav nav button .nav-item-label small{color:var(--muted);font-size:10px;font-weight:400;line-height:1.35}
+.side-nav nav button.active .nav-item-label small{color:currentColor;opacity:.78}

@@ -375,17 +375,24 @@ export default function App() {
       <aside className={`side-nav ${navOpen ? "open" : ""}`}>
         <nav>
           <span className="nav-section-title">{t("工具")}</span>
-          {views.filter((item) => item.section === "tools").map((item) => (
-            <button
-              key={item.id}
-              className={activeView === item.id ? "active" : ""}
-              onClick={() => scheduleNavigate(item.id)}
-              onDoubleClick={() => handleNavDoubleClick(item.id)}
-              title={isMultiInstanceView(item.id) ? t("单击切换，双击新建标签") : undefined}
-            >
-              {item.icon}<span>{item.label}</span>
-            </button>
-          ))}
+          {views.filter((item) => item.section === "tools").map((item) => {
+            const showMultiTabHint = item.id === "format" || item.id === "diff";
+            return (
+              <button
+                key={item.id}
+                className={activeView === item.id ? "active" : ""}
+                onClick={() => scheduleNavigate(item.id)}
+                onDoubleClick={() => handleNavDoubleClick(item.id)}
+                title={isMultiInstanceView(item.id) ? t("单击切换，双击新建标签") : undefined}
+              >
+                {item.icon}
+                <span className="nav-item-label">
+                  {item.label}
+                  {showMultiTabHint && <small>{t("双击可新建多个标签")}</small>}
+                </span>
+              </button>
+            );
+          })}
           <span className="nav-section-title">{t("资料库")}</span>
           {views.filter((item) => item.section === "library").map((item) => (
             <button key={item.id} className={activeView === item.id ? "active" : ""} onClick={() => scheduleNavigate(item.id)} onDoubleClick={() => handleNavDoubleClick(item.id)}>

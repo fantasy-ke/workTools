@@ -12,5 +12,6 @@ describe("i18n", () => {
     expect(translateForLanguage("配置处理", "en-US")).toBe("Configuration Processing");
     expect(translateForLanguage("已替换 5 处符号", "en-US")).toBe("Replaced 5 delimiters");
     expect(translateForLanguage("保存工作区时同步到本地文件", "en-US")).toBe("Sync workspaces to a local file when saving");
+    expect(translateForLanguage("双击可新建多个标签", "en-US")).toBe("Double-click for more tabs");
   });
 });
