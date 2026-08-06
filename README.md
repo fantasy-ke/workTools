@@ -74,14 +74,14 @@ npm run tauri:build
 
 ## Docker Web 部署
 
-直接运行 GitHub Container Registry 中的正式镜像：
+使用 `compose.ghcr.yaml` 直接部署 GitHub Container Registry 镜像（默认使用当前可用的 `dev-latest`）：
 
 ```powershell
-docker pull ghcr.io/fantasy-ke/worktools:latest
-docker run -d --name worktools-web --restart unless-stopped -p 8080:80 ghcr.io/fantasy-ke/worktools:latest
+docker compose -f compose.ghcr.yaml pull
+docker compose -f compose.ghcr.yaml up -d
 ```
 
-也可以从当前源码构建，并通过 Docker Compose 后台启动：
+也可以使用 `compose.yaml` 从当前源码构建并启动：
 
 ```powershell
 docker compose up --build -d

@@ -1,0 +1,9 @@
+services:
+  worktools-web:
+    image: "ghcr.io/fantasy-ke/worktools:${WORKTOOLS_IMAGE_TAG:-dev-latest}"
+    pull_policy: always
+    ports:
+      - "${WORKTOOLS_PORT:-8080}:80"
+    volumes:
+      - ./data/docker/nginx-logs:/var/log/nginx
+    restart: unless-stopped
