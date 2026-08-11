@@ -710,4 +710,8 @@ export const enUS: Record<string, string> = {
   "工作区已保存，但本地目录权限未授予": "Workspace saved, but permission for the local folder was not granted",
   "工作区已保存，但同步本地文件失败": "Workspace saved, but syncing the local file failed",
   "工作区已保存": "Workspace saved",
+  "标签页操作": "Tab actions",
+  "关闭当前页": "Close Current",
+  "关闭其他页": "Close Others",
+  "关闭全部": "Close All",
 };

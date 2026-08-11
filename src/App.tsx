@@ -83,6 +83,12 @@ interface OpenTab {
   workspaceId?: string;
 }
 
+interface TabContextMenuState {
+  tabId: string;
+  left: number;
+  top: number;
+}
+
 function isMultiInstanceView(view: ViewId): view is "format" | "diff" | "config" {
   return view === "format" || view === "diff" || view === "config";
 }
@@ -164,6 +170,7 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteSearch, setPaletteSearch] = useState("");
   const [navOpen, setNavOpen] = useState(false);
+  const [tabContextMenu, setTabContextMenu] = useState<TabContextMenuState | null>(null);
   const navClickTimer = useRef<number | null>(null);
 
   const activeTab = openTabs.find((tab) => tab.id === activeTabId) ?? openTabs[0];
@@ -225,6 +232,36 @@ export default function App() {
     }
   }, [activeTabId, openTabs, setView]);
 
+  const closeOtherTabs = useCallback((targetId: string) => {
+    const target = openTabs.find((tab) => tab.id === targetId);
+    if (!target) return;
+    setOpenTabs(openTabs.filter((tab) => tab.view === "home" || tab.id === targetId));
+    setActiveTabId(target.id);
+    setView(target.view);
+  }, [openTabs, setView]);
+
+  const closeAllTabs = useCallback(() => {
+    const homeTab = openTabs.find((tab) => tab.view === "home") ?? createOpenTab("home");
+    setOpenTabs([homeTab]);
+    setActiveTabId(homeTab.id);
+    setView(homeTab.view);
+  }, [openTabs, setView]);
+
+  const openTabContextMenu = useCallback((event: React.MouseEvent<HTMLDivElement>, tabId: string) => {
+    event.preventDefault();
+    const margin = 8;
+    const menuWidth = 168;
+    const menuHeight = 116;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const anchorX = event.clientX || bounds.left + margin;
+    const anchorY = event.clientY || bounds.bottom;
+    setTabContextMenu({
+      tabId,
+      left: Math.max(margin, Math.min(anchorX, window.innerWidth - menuWidth - margin)),
+      top: Math.max(margin, Math.min(anchorY, window.innerHeight - menuHeight - margin)),
+    });
+  }, []);
+
   const updateTabName = useCallback((tabId: string, name: string) => {
     setOpenTabs((current) => current.map((tab) => tab.id === tabId ? { ...tab, name: name.trim() || undefined } : tab));
   }, []);
@@ -264,6 +301,22 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!tabContextMenu) return;
+    const dismiss = () => setTabContextMenu(null);
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dismiss();
+    };
+    document.addEventListener("pointerdown", dismiss);
+    window.addEventListener("keydown", dismissOnEscape);
+    window.addEventListener("resize", dismiss);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      window.removeEventListener("keydown", dismissOnEscape);
+      window.removeEventListener("resize", dismiss);
+    };
+  }, [tabContextMenu]);
+
+  useEffect(() => {
     const recoveryView = sessionStorage.getItem(LAZY_RECOVERY_VIEW_KEY) as ViewId | null;
     if (!recoveryView || !views.some((item) => item.id === recoveryView)) return;
     sessionStorage.removeItem(LAZY_RECOVERY_VIEW_KEY);
@@ -301,6 +354,7 @@ export default function App() {
 
   const active = views.find((item) => item.id === activeView) ?? views[0];
   const activeTitle = activeTab ? getTabTitle(activeTab) : active.label;
+  const contextTab = tabContextMenu ? openTabs.find((tab) => tab.id === tabContextMenu.tabId) : undefined;
   const commands = useMemo(
     () => views.filter((item) => `${item.label} ${item.id}`.toLocaleLowerCase().includes(paletteSearch.toLocaleLowerCase())),
     [paletteSearch, views],
@@ -349,7 +403,11 @@ export default function App() {
           const selected = activeTabId === tab.id;
           const title = getTabTitle(tab);
           return (
-            <div className={`task-tab ${selected ? "active" : ""}`} key={tab.id}>
+            <div
+              className={`task-tab ${selected ? "active" : ""}`}
+              key={tab.id}
+              onContextMenu={(event) => openTabContextMenu(event, tab.id)}
+            >
               <button
                 className="task-tab-main"
                 role="tab"
@@ -371,6 +429,47 @@ export default function App() {
         <span className="task-tabs-spacer" />
         <span className="task-shortcut-hint">{t("Alt 1–9 快速打开")}</span>
       </div>
+
+      {tabContextMenu && contextTab && (
+        <div
+          className="task-tab-context-menu"
+          role="menu"
+          aria-label={t("标签页操作")}
+          style={{ left: tabContextMenu.left, top: tabContextMenu.top }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <button
+            role="menuitem"
+            disabled={contextTab.view === "home"}
+            onClick={() => {
+              closeTab(contextTab.id);
+              setTabContextMenu(null);
+            }}
+          >
+            {t("关闭当前页")}
+          </button>
+          <button
+            role="menuitem"
+            disabled={openTabs.every((tab) => tab.view === "home" || tab.id === contextTab.id)}
+            onClick={() => {
+              closeOtherTabs(contextTab.id);
+              setTabContextMenu(null);
+            }}
+          >
+            {t("关闭其他页")}
+          </button>
+          <button
+            role="menuitem"
+            disabled={openTabs.every((tab) => tab.view === "home")}
+            onClick={() => {
+              closeAllTabs();
+              setTabContextMenu(null);
+            }}
+          >
+            {t("关闭全部")}
+          </button>
+        </div>
+      )}
 
       <aside className={`side-nav ${navOpen ? "open" : ""}`}>
         <nav>
