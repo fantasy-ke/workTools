@@ -6,6 +6,7 @@ export type ArrayCompareMode = "sequence" | "unordered" | "match-by-key";
 export type CronDialect = "unix" | "spring" | "quartz";
 export type ThemeMode = "light" | "dark" | "system";
 export type DensityMode = "comfortable" | "compact";
+export type TabOverflowMode = "scroll" | "wrap";
 
 export interface ValidationIssue {
   severity: "error" | "warning";
@@ -160,6 +161,7 @@ export interface WorktoolsSettings {
   language: AppLanguage;
   theme: ThemeMode;
   density: DensityMode;
+  tabOverflowMode: TabOverflowMode;
   editorFont: "Cascadia Code" | "JetBrains Mono" | "Consolas";
   fontSize: number;
   wordWrap: boolean;

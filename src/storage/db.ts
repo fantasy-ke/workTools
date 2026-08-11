@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS: WorktoolsSettings = {
   language: "zh-CN",
   theme: "system",
   density: "comfortable",
+  tabOverflowMode: "scroll",
   editorFont: "Cascadia Code",
   fontSize: 14,
   wordWrap: true,

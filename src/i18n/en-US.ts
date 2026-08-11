@@ -714,4 +714,9 @@ export const enUS: Record<string, string> = {
   "关闭当前页": "Close Current",
   "关闭其他页": "Close Others",
   "关闭全部": "Close All",
+  "标签栏溢出": "Tab bar overflow",
+  "单行滚动": "Single-line scroll",
+  "多行平铺": "Multi-line layout",
+  "单行滚动：标签页超出一行时水平滚动显示。": "Single-line scroll: Horizontally scroll tabs when they exceed one line.",
+  "多行平铺：标签页超出一行时自动换行，平铺显示所有标签。": "Multi-line layout: Wrap tabs automatically to show all tabs.",
 };

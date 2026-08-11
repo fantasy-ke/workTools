@@ -373,7 +373,7 @@ export default function App() {
   };
 
   return (
-    <div className={`app-shell ${tauriRuntime ? "tauri-shell" : ""}`}>
+    <div className={`app-shell ${tauriRuntime ? "tauri-shell" : ""}`} data-tab-overflow={settings.tabOverflowMode}>
       <header className="app-bar" data-tauri-drag-region>
         <button className="mobile-menu icon-btn" onClick={() => setNavOpen((value) => !value)} aria-label={t("打开导航")}>
           <Menu />
@@ -397,7 +397,7 @@ export default function App() {
         {tauriRuntime && <WindowControls />}
       </header>
 
-      <div className="task-tabs" role="tablist" aria-label={t("已打开任务")}>
+      <div className="task-tabs" data-overflow-mode={settings.tabOverflowMode} role="tablist" aria-label={t("已打开任务")}>
         {openTabs.map((tab) => {
           const item = views.find((candidate) => candidate.id === tab.view) ?? views[0];
           const selected = activeTabId === tab.id;

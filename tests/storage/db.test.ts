@@ -9,6 +9,8 @@ describe("settings defaults", () => {
     expect(applySettingsDefaults({ language: "en-US" }).language).toBe("en-US");
     expect(applySettingsDefaults().syncWorkspaceToLocalFile).toBe(false);
     expect(applySettingsDefaults({ syncWorkspaceToLocalFile: true }).syncWorkspaceToLocalFile).toBe(true);
+    expect(applySettingsDefaults().tabOverflowMode).toBe("scroll");
+    expect(applySettingsDefaults({ tabOverflowMode: "wrap" }).tabOverflowMode).toBe("wrap");
   });
 
   it("preserves an explicit disabled preference", () => {
