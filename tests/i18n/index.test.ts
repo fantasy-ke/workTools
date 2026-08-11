@@ -13,5 +13,6 @@ describe("i18n", () => {
     expect(translateForLanguage("已替换 5 处符号", "en-US")).toBe("Replaced 5 delimiters");
     expect(translateForLanguage("保存工作区时同步到本地文件", "en-US")).toBe("Sync workspaces to a local file when saving");
     expect(translateForLanguage("双击可新建多个标签", "en-US")).toBe("Double-click for more tabs");
+    expect(translateForLanguage("格式无效，已按原文导出，未应用脱敏", "en-US")).toBe("Invalid format; exported the original text without masking");
   });
 });

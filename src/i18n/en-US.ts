@@ -476,6 +476,7 @@ export const enUS: Record<string, string> = {
   "已导出批量": "Exported batch",
   "已导出脱敏报文": "Exported desensitized message",
   "已导出原始报文": "The original message has been exported",
+  "格式无效，已按原文导出，未应用脱敏": "Invalid format; exported the original text without masking",
   "已导入": "Imported",
   "已读取": "Read",
   "已反转义控制符与 Unicode": "Control characters escaped and Unicode",

@@ -95,18 +95,26 @@ export function FormatPage({ snapshot, workspaceId, active = false, onTitleChang
     setText(next);
     notify(action === "escape" ? t("已添加一层 JSON 转义") : action === "unescape" ? t("已反转义控制符与 Unicode") : t("已移除一层引号、斜杠转义"));
   };  const copy = async () => { await navigator.clipboard.writeText(text); notify(t("已复制到剪贴板")); };
-  const getExportContent = () => maskExport && resolved !== "text" ? maskDocumentText(text, resolved, maskRules) : text;
+  const canMaskExport = maskExport && resolved !== "text" && parsed.valid;
+  const getExportContent = () => canMaskExport ? maskDocumentText(text, resolved, maskRules) : text;
+  const notifyExportSuccess = (message: string) => {
+    if (maskExport && resolved !== "text" && !parsed.valid) {
+      notify(t("格式无效，已按原文导出，未应用脱敏"), "info");
+      return;
+    }
+    notify(message);
+  };
   const exportRaw = async () => {
     try {
       const content = getExportContent();
       const ext = resolved === "json" ? "json" : resolved === "xml" ? "xml" : "txt";
-      await saveTextFile(`worktools-message.${ext}`, content); notify(maskExport ? t("已导出脱敏报文") : t("已导出原始报文"));
+      await saveTextFile(`worktools-message.${ext}`, content); notifyExportSuccess(maskExport ? t("已导出脱敏报文") : t("已导出原始报文"));
     } catch (error) { notify(error instanceof Error ? error.message : t("导出失败"), "error"); }
   };
   const exportTxt = async () => {
     try {
       await saveTextFile("worktools-message.txt", getExportContent());
-      notify(t("已导出 TXT 文件"));
+      notifyExportSuccess(t("已导出 TXT 文件"));
     } catch (error) { notify(error instanceof Error ? error.message : t("导出失败"), "error"); }
   };
   const exportHighlighted = async () => {
@@ -114,7 +122,7 @@ export function FormatPage({ snapshot, workspaceId, active = false, onTitleChang
       const content = getExportContent();
       const report = generateDocumentHtmlExport({ title: sourceName + " - " + t("语法高亮"), fileName: sourceName, text: content, format: resolved });
       await saveTextFile("worktools-message-highlighted.html", report);
-      notify(t("已导出高亮 HTML"));
+      notifyExportSuccess(t("已导出高亮 HTML"));
     } catch (error) { notify(error instanceof Error ? error.message : t("导出失败"), "error"); }
   };
   const saveCurrentWorkspace = async () => {
