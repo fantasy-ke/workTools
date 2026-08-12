@@ -10,6 +10,7 @@ import {
   GitCompareArrows,
   Pin,
   PinOff,
+  Pencil,
   RotateCcw,
   Search,
   Trash2,
@@ -38,11 +39,18 @@ function workspaceDescription(type: WorkspaceRecord["type"]) {
   return t("Cron 表达式场景");
 }
 
-export function WorkspacesPage({ onOpen }: { onOpen: (workspace: WorkspaceRecord) => void }) {
+interface WorkspacesPageProps {
+  onOpen: (workspace: WorkspaceRecord) => void;
+  onWorkspaceRenamed: (workspace: WorkspaceRecord) => void;
+}
+
+export function WorkspacesPage({ onOpen, onWorkspaceRenamed }: WorkspacesPageProps) {
   const state = useAppStore();
   const { notify } = useToast();
   const [tab, setTab] = useState<Tab>("workspaces");
   const [search, setSearch] = useState("");
+  const [renamingWorkspaceId, setRenamingWorkspaceId] = useState<string | null>(null);
+  const [renamingWorkspaceName, setRenamingWorkspaceName] = useState("");
   const normalizedSearch = search.toLocaleLowerCase();
   const filtered = useMemo(
     () => [...state.workspaces]
@@ -81,6 +89,32 @@ export function WorkspacesPage({ onOpen }: { onOpen: (workspace: WorkspaceRecord
     } catch (error) {
       notify(error instanceof Error ? error.message : t("工作包导入失败"), "error");
     }
+  };
+
+  const startRenamingWorkspace = (workspace: WorkspaceRecord) => {
+    setRenamingWorkspaceId(workspace.id);
+    setRenamingWorkspaceName(workspace.name);
+  };
+
+  const cancelRenamingWorkspace = () => {
+    setRenamingWorkspaceId(null);
+    setRenamingWorkspaceName("");
+  };
+
+  const renameWorkspace = async (workspace: WorkspaceRecord) => {
+    const trimmedName = renamingWorkspaceName.trim();
+    if (!trimmedName) {
+      notify(t("工作区名称不能为空"), "error");
+      return;
+    }
+    if (trimmedName === workspace.name) {
+      cancelRenamingWorkspace();
+      return;
+    }
+    const renamed = await state.renameWorkspace(workspace.id, trimmedName);
+    onWorkspaceRenamed(renamed);
+    cancelRenamingWorkspace();
+    notify(t("工作区已重命名"));
   };
 
   const moveToTrash = async (workspace: WorkspaceRecord) => {
@@ -148,11 +182,27 @@ export function WorkspacesPage({ onOpen }: { onOpen: (workspace: WorkspaceRecord
                     <span className="workspace-type-icon">{workspaceIcon(workspace.type)}</span>
                     <div className="workspace-card-actions">
                       <button className="icon-btn" onClick={() => state.toggleWorkspacePinned(workspace.id)} aria-label={workspace.pinned ? t("取消置顶") : t("置顶")}>{workspace.pinned ? <PinOff /> : <Pin />}</button>
+                      <button className="icon-btn" onClick={() => startRenamingWorkspace(workspace)} aria-label={t("重命名工作区")} title={t("重命名工作区")}><Pencil /></button>
                       <button className="icon-btn danger" onClick={() => void moveToTrash(workspace)} aria-label={t("移到回收站")} title={t("移到回收站")}><Trash2 /></button>
                     </div>
                   </div>
                   <Badge tone={workspace.type === "diff" ? "warning" : workspace.type === "cron" ? "accent" : "success"}>{workspace.type.toUpperCase()}</Badge>
-                  <h3>{workspace.name}</h3>
+                  {renamingWorkspaceId === workspace.id ? (
+                    <form className="workspace-rename-form" onSubmit={(event) => { event.preventDefault(); void renameWorkspace(workspace); }}>
+                      <input
+                        value={renamingWorkspaceName}
+                        onChange={(event) => setRenamingWorkspaceName(event.target.value)}
+                        aria-label={t("工作区名称")}
+                        autoFocus
+                      />
+                      <div className="workspace-rename-actions">
+                        <Button type="submit" variant="primary" size="small">{t("保存")}</Button>
+                        <Button type="button" variant="ghost" size="small" onClick={cancelRenamingWorkspace}>{t("取消")}</Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <h3>{workspace.name}</h3>
+                  )}
                   <p>{workspaceDescription(workspace.type)}</p>
                   <div className="workspace-card-meta">
                     <span>{formatDateTime(workspace.updatedAt)}</span>

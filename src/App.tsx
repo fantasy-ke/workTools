@@ -273,6 +273,10 @@ export default function App() {
     setOpenTabs((current) => current.map((tab) => tab.id === tabId ? { ...tab, name: workspace.name, workspaceId: workspace.id } : tab));
   }, []);
 
+  const updateRenamedWorkspaceTabs = useCallback((workspace: WorkspaceRecord) => {
+    setOpenTabs((current) => current.map((tab) => tab.workspaceId === workspace.id ? { ...tab, name: workspace.name } : tab));
+  }, []);
+
   const openWorkspace = useCallback((workspace: WorkspaceRecord) => {
     const target: ViewId = workspace.snapshot.kind === "format" ? "format" : workspace.snapshot.kind === "diff" ? "diff" : "cron";
     const snapshot = cloneSnapshot(workspace.snapshot);
@@ -373,7 +377,7 @@ export default function App() {
     if (tab.view === "cron") return <CronPage snapshot={tab.snapshot} workspaceId={tab.workspaceId} active={activeTabId === tab.id} onWorkspaceSaved={(workspace) => updateTabWorkspace(tab.id, workspace)} />;
     if (tab.view === "string-length") return <StringLengthPage />;
     if (tab.view === "batch") return <BatchPage />;
-    if (tab.view === "workspaces") return <WorkspacesPage onOpen={openWorkspace} />;
+    if (tab.view === "workspaces") return <WorkspacesPage onOpen={openWorkspace} onWorkspaceRenamed={updateRenamedWorkspaceTabs} />;
     if (tab.view === "help") return <HelpPage />;
     return <SettingsPage />;
   };
