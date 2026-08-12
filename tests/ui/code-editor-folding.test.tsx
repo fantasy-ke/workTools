@@ -46,4 +46,20 @@ describe("CodeEditor folding controls", () => {
       }),
     });
   });
+
+  it("uses the SQL language for SQL comparison editors", () => {
+    render(
+      <CodeEditor
+        value="SELECT id FROM users;"
+        format="sql"
+        theme="light"
+        fontFamily="Arial"
+        fontSize={14}
+        wordWrap={false}
+        label="sql editor"
+      />,
+    );
+
+    expect(editorProps[0]).toMatchObject({ language: "sql" });
+  });
 });

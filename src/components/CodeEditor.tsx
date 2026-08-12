@@ -95,7 +95,7 @@ export function CodeEditor({
     <div className="code-editor" role="region" aria-label={label}>
       <Editor
         value={value}
-        language={format === "xml" ? "xml" : format === "json" ? "json" : "plaintext"}
+        language={format === "xml" ? "xml" : format === "json" ? "json" : format === "sql" ? "sql" : "plaintext"}
         theme={(theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)) ? "worktools-dark" : "worktools-light"}
         onMount={handleMount}
         onChange={(next) => onChange?.(next ?? "")}

@@ -51,7 +51,7 @@ export function applyMaskRules(data: unknown, rules: MaskRule[], root = "$", max
 }
 
 export function maskDocumentText(text: string, format: ResolvedFormat, rules: MaskRule[]): string {
-  if (format === "text") return text;
+  if (format === "text" || format === "sql") return text;
   const parsed = parseDocument(text, format);
   if (!parsed.valid) throw new Error(parsed.issues[0]?.message ?? "报文无效，无法脱敏");
   const builder = new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: "@", textNodeName: "#text", cdataPropName: "#cdata", format: true, indentBy: "  " });

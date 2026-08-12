@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DiffExportInput } from "../../src/core/export";
+import { compareDocuments, DEFAULT_DIFF_OPTIONS } from "../../src/core/diff";
 import { generateDiffExport, generateDocumentHtmlExport, highlightSyntaxLine } from "../../src/core/export";
 
 const input: DiffExportInput = {
@@ -89,6 +90,57 @@ describe("syntax highlighted export", () => {
     expect(highlighted).toContain('class="syntax-tag">room</span>');
     expect(highlighted).toContain('class="syntax-attribute">id</span>');
     expect(highlighted).toContain('class="syntax-string">&quot;DLX&quot;</span>');
+  });
+
+  it("highlights SQL keywords, strings, numbers, and comments", () => {
+    const highlighted = highlightSyntaxLine("SELECT id FROM users WHERE name = 'Admin' AND level = 2; -- note", "sql");
+
+    expect(highlighted).toContain('class="syntax-keyword">SELECT</span>');
+    expect(highlighted).toContain('class="syntax-string">&#039;Admin&#039;</span>');
+    expect(highlighted).toContain('class="syntax-number">2</span>');
+    expect(highlighted).toContain('class="syntax-comment">-- note</span>');
+  });
+
+  it("exports normalized SQL payloads so difference line numbers stay aligned", () => {
+    const leftText = "select id from users where id=1;";
+    const rightText = "SELECT id\nFROM users\nWHERE id = 2;";
+    const result = compareDocuments(leftText, rightText, "sql", DEFAULT_DIFF_OPTIONS);
+    const report = JSON.parse(generateDiffExport({
+      ...input,
+      leftName: "before.sql",
+      rightName: "after.sql",
+      leftText,
+      rightText,
+      result,
+    }, "json"));
+
+    expect(report.payload.left).toBe(result.normalizedLeft);
+    expect(report.payload.right).toBe(result.normalizedRight);
+    expect(report.highlights.left.length).toBeGreaterThan(0);
+    expect(report.highlights.right.length).toBeGreaterThan(0);
+  });
+
+  it("exports the original SQL text when formatting fails even if masking is enabled", () => {
+    const leftText = "SELECT 'unterminated";
+    const rightText = "SELECT 'closed';";
+    const result = compareDocuments(leftText, rightText, "sql", DEFAULT_DIFF_OPTIONS);
+    const report = JSON.parse(generateDiffExport({
+      ...input,
+      leftText,
+      rightText,
+      result,
+      maskEnabled: true,
+      maskRules: [{
+        id: "sql-mask",
+        path: "$.password",
+        strategy: "replace",
+        replacement: "***",
+        enabled: true,
+      }],
+    }, "json"));
+
+    expect(result.leftValid).toBe(false);
+    expect(report.payload).toEqual({ left: leftText, right: rightText });
   });
 
   it("generates a standalone highlighted HTML payload report", () => {

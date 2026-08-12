@@ -2,11 +2,12 @@ import type {
   DiffChange,
   DiffOptions,
   DiffResult,
-  DocumentFormat,
+  DiffDocumentFormat,
   ResolvedFormat,
   StructureEntry,
 } from "../types";
 import { detectFormat, inferStructure, parseDocument } from "./document";
+import { looksLikeSql, normalizeSql } from "./sql";
 
 export const DEFAULT_DIFF_OPTIONS: DiffOptions = {
   mode: "semantic",
@@ -252,10 +253,15 @@ function compareText(left: string, right: string, options: DiffOptions): DiffCha
   return changes;
 }
 
-function resolveFormat(leftText: string, rightText: string, requested: DocumentFormat): ResolvedFormat {
+export function detectDiffFormat(text: string): ResolvedFormat {
+  const format = detectFormat(text);
+  return format === "text" && looksLikeSql(text) ? "sql" : format;
+}
+
+function resolveFormat(leftText: string, rightText: string, requested: DiffDocumentFormat): ResolvedFormat {
   if (requested !== "auto") return requested;
-  const left = detectFormat(leftText);
-  const right = detectFormat(rightText);
+  const left = detectDiffFormat(leftText);
+  const right = detectDiffFormat(rightText);
   return left === right ? left : "text";
 }
 
@@ -267,7 +273,7 @@ function prettyNormalized(data: unknown, format: ResolvedFormat): string | undef
 export function compareDocuments(
   leftText: string,
   rightText: string,
-  requestedFormat: DocumentFormat,
+  requestedFormat: DiffDocumentFormat,
   providedOptions: Partial<DiffOptions> = {},
 ): DiffResult {
   const started = performance.now();
@@ -282,6 +288,22 @@ export function compareDocuments(
 
   if (options.mode === "text" || format === "text") {
     changes = compareText(leftText, rightText, options);
+  } else if (format === "sql") {
+    const left = normalizeSql(leftText);
+    const right = normalizeSql(rightText);
+    leftValid = left.valid;
+    rightValid = right.valid;
+    if (!left.valid || !right.valid) {
+      warnings.push("至少一侧 SQL 无法格式化，已退回原文对比");
+      changes = compareText(leftText, rightText, options);
+    } else {
+      normalizedLeft = left.text;
+      normalizedRight = right.text;
+      changes = compareText(left.text, right.text, options);
+      warnings.push(options.mode === "structure"
+        ? "SQL 暂不支持结构对比，已使用格式化文本对比"
+        : "SQL 使用格式化后的文本进行对比");
+    }
   } else {
     const left = parseDocument(leftText, format);
     const right = parseDocument(rightText, format);

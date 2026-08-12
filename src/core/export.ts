@@ -1,6 +1,7 @@
 import type { DiffChangeKind, DiffOptions, DiffResult, MaskRule, ResolvedFormat } from "../types";
 import { buildDiffHighlights, type EditorHighlight } from "./diffHighlights";
 import { maskDocumentText } from "./masking";
+import { SQL_KEYWORDS } from "./sqlKeywords";
 
 export type DiffExportFormat = "html" | "markdown" | "csv" | "json";
 
@@ -97,9 +98,36 @@ function highlightXmlLine(line: string): string {
   return output + escapeHtml(line.slice(cursor));
 }
 
+const SQL_KEYWORD_PATTERN = new RegExp(`\\b(?:${SQL_KEYWORDS.join("|")})\\b`, "i");
+const SQL_TOKEN_PATTERN = new RegExp(`--.*$|\\/\\*.*?\\*\\/|'(?:''|[^'])*'|"(?:""|[^"])*"|\\b(?:${SQL_KEYWORDS.join("|")})\\b|-?(?:0|[1-9]\\d*)(?:\\.\\d+)?`, "gi");
+
+function highlightSqlLine(line: string): string {
+  let cursor = 0;
+  let output = "";
+
+  for (const match of line.matchAll(SQL_TOKEN_PATTERN)) {
+    const index = match.index ?? 0;
+    const token = match[0];
+    output += escapeHtml(line.slice(cursor, index));
+    if (token.startsWith("--") || token.startsWith("/*")) {
+      output += syntaxSpan("comment", token);
+    } else if (token.startsWith("'") || token.startsWith('"')) {
+      output += syntaxSpan("string", token);
+    } else if (SQL_KEYWORD_PATTERN.test(token)) {
+      output += syntaxSpan("keyword", token);
+    } else {
+      output += syntaxSpan("number", token);
+    }
+    cursor = index + token.length;
+  }
+
+  return output + escapeHtml(line.slice(cursor));
+}
+
 export function highlightSyntaxLine(line: string, format: ResolvedFormat): string {
   if (format === "json") return highlightJsonLine(line);
   if (format === "xml") return highlightXmlLine(line);
+  if (format === "sql") return highlightSqlLine(line);
   return escapeHtml(line);
 }
 
@@ -117,11 +145,14 @@ function csvCell(value: unknown): string {
 }
 
 function exportPayload(input: DiffExportInput): { left: string; right: string } {
-  if (!input.maskEnabled || !input.maskRules?.length) return { left: input.leftText, right: input.rightText };
+  const source = input.result.format === "sql" && input.result.normalizedLeft !== undefined && input.result.normalizedRight !== undefined
+    ? { left: input.result.normalizedLeft, right: input.result.normalizedRight }
+    : { left: input.leftText, right: input.rightText };
+  if (!input.maskEnabled || !input.maskRules?.length) return source;
   const format: ResolvedFormat = input.result.format;
   return {
-    left: maskDocumentText(input.leftText, format, input.maskRules),
-    right: maskDocumentText(input.rightText, format, input.maskRules),
+    left: maskDocumentText(source.left, format, input.maskRules),
+    right: maskDocumentText(source.right, format, input.maskRules),
   };
 }
 

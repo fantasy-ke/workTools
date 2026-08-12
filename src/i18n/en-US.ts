@@ -719,4 +719,9 @@ export const enUS: Record<string, string> = {
   "多行平铺": "Multi-line layout",
   "单行滚动：标签页超出一行时水平滚动显示。": "Single-line scroll: Horizontally scroll tabs when they exceed one line.",
   "多行平铺：标签页超出一行时自动换行，平铺显示所有标签。": "Multi-line layout: Wrap tabs automatically to show all tabs.",
+  "SQL 格式化对比": "Formatted SQL comparison",
+  "SQL 导出不脱敏": "SQL exports are not masked",
+  "至少一侧 SQL 无法格式化，已退回原文对比": "At least one SQL input could not be formatted; original-text comparison was used",
+  "SQL 暂不支持结构对比，已使用格式化文本对比": "SQL structure comparison is not supported; formatted-text comparison was used",
+  "SQL 使用格式化后的文本进行对比": "SQL is compared after formatting",
 };

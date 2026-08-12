@@ -1,6 +1,7 @@
 export type ViewId = "home" | "format" | "diff" | "config" | "cron" | "batch" | "workspaces" | "help" | "settings";
 export type DocumentFormat = "auto" | "json" | "xml" | "text";
-export type ResolvedFormat = Exclude<DocumentFormat, "auto">;
+export type DiffDocumentFormat = DocumentFormat | "sql";
+export type ResolvedFormat = Exclude<DiffDocumentFormat, "auto">;
 export type DiffMode = "text" | "semantic" | "structure";
 export type ArrayCompareMode = "sequence" | "unordered" | "match-by-key";
 export type CronDialect = "unix" | "spring" | "quartz";
@@ -130,7 +131,7 @@ export interface StructureBaseline {
 
 export type WorkspaceSnapshot =
   | { kind: "format"; text: string; format: DocumentFormat; sourceName?: string }
-  | { kind: "diff"; leftText: string; rightText: string; format: DocumentFormat; options: DiffOptions; leftName?: string; rightName?: string }
+  | { kind: "diff"; leftText: string; rightText: string; format: DiffDocumentFormat; options: DiffOptions; leftName?: string; rightName?: string }
   | { kind: "cron"; dialect: CronDialect; expression: string; timezone: string };
 
 export interface WorkspaceRecord {

@@ -25,10 +25,10 @@ async function toLocalTextFile(file: File): Promise<LocalTextFile> {
 
 export async function openTextFiles(multiple = false): Promise<LocalTextFile[]> {
   if (!isTauriRuntime()) {
-    return Promise.all((await browserPickFiles(".json,.xml,.txt,.log,.apiwork,application/json,text/xml,text/plain", multiple)).map(toLocalTextFile));
+    return Promise.all((await browserPickFiles(".json,.xml,.sql,.txt,.log,.apiwork,application/json,text/xml,text/plain", multiple)).map(toLocalTextFile));
   }
   const [{ open }, { readTextFile, stat }] = await Promise.all([import("@tauri-apps/plugin-dialog"), import("@tauri-apps/plugin-fs")]);
-  const selected = await open({ multiple, directory: false, filters: [{ name: "报文文件", extensions: ["json", "xml", "txt", "log"] }] });
+  const selected = await open({ multiple, directory: false, filters: [{ name: "报文文件", extensions: ["json", "xml", "sql", "txt", "log"] }] });
   const paths = selected ? (Array.isArray(selected) ? selected : [selected]) : [];
   return Promise.all(paths.map(async (path) => {
     const info = await stat(path);
@@ -49,7 +49,7 @@ export async function openBinaryFile(extension = "apiwork"): Promise<{ name: str
 
 export async function openDirectoryTextFiles(): Promise<LocalTextFile[]> {
   if (!isTauriRuntime()) {
-    const files = await browserPickFiles(".json,.xml,.txt,.log", true, true);
+    const files = await browserPickFiles(".json,.xml,.sql,.txt,.log", true, true);
     return Promise.all(files.map(async (file) => {
       const local = await toLocalTextFile(file);
       local.relativePath = normalizeDirectoryRelativePath(file.webkitRelativePath || file.name, true);
@@ -67,7 +67,7 @@ export async function openDirectoryTextFiles(): Promise<LocalTextFile[]> {
       const path = `${directory}${directory.endsWith("\\") || directory.endsWith("/") ? "" : "\\"}${entry.name}`;
       const nextRelative = relative ? `${relative}/${entry.name}` : entry.name;
       if (entry.isDirectory) await walk(path, nextRelative);
-      else if (/\.(json|xml|txt|log)$/i.test(entry.name)) {
+      else if (/\.(json|xml|sql|txt|log)$/i.test(entry.name)) {
         const info = await fs.stat(path);
         output.push({ name: entry.name, content: await fs.readTextFile(path), size: info.size, path, relativePath: nextRelative });
       }

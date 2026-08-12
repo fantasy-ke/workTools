@@ -4,6 +4,7 @@ import "monaco-editor/editor/contrib/find/browser/findController";
 import "monaco-editor/editor/contrib/folding/browser/folding";
 import "../node_modules/monaco-editor/esm/vs/base/browser/ui/codicons/codicon/codicon.css";
 import EditorWorker from "monaco-editor/editor/editor.worker?worker";
+import { SQL_KEYWORDS } from "./core/sqlKeywords";
 
 self.MonacoEnvironment = {
   getWorker() {
@@ -122,6 +123,56 @@ registerLanguage(
         [/-->/, { token: "comment", next: "@pop" }],
         [/<!--/, "comment.content.invalid"],
         [/[<\-]/, "comment.content"],
+      ],
+    },
+  },
+);
+
+registerLanguage(
+  "sql",
+  {
+    comments: { lineComment: "--", blockComment: ["/*", "*/"] },
+    brackets: [
+      ["(", ")"],
+      ["[", "]"],
+    ],
+    autoClosingPairs: [
+      { open: "(", close: ")" },
+      { open: "[", close: "]" },
+      { open: "'", close: "'" },
+      { open: '"', close: '"' },
+    ],
+    surroundingPairs: [
+      { open: "(", close: ")" },
+      { open: "[", close: "]" },
+      { open: "'", close: "'" },
+      { open: '"', close: '"' },
+    ],
+  },
+  {
+    defaultToken: "",
+    tokenPostfix: ".sql",
+    ignoreCase: true,
+    keywords: [...SQL_KEYWORDS],
+    tokenizer: {
+      root: [
+        { include: "@whitespace" },
+        [/--.*$/, "comment"],
+        [/\/\*/, "comment", "@comment"],
+        [/'(?:''|[^'])*'/, "string"],
+        [/"(?:""|[^"])*"/, "string"],
+        [/`(?:``|[^`])*`/, "string"],
+        [/\[(?:]]|[^]])*\]/, "string"],
+        [/-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/, "number"],
+        [/[a-zA-Z_][\w$]*/, { cases: { "@keywords": "keyword", "@default": "identifier" } }],
+        [/[(),.;]/, "delimiter"],
+        [/[<>!=~+\-*\/%|&^]+/, "operator"],
+      ],
+      whitespace: [[/[ \t\r\n]+/, ""]],
+      comment: [
+        [/[^*]+/, "comment"],
+        [/\*\//, "comment", "@pop"],
+        [/[*/]/, "comment"],
       ],
     },
   },

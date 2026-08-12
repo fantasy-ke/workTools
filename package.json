@@ -28,6 +28,7 @@
     "monaco-editor": "^0.56.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "sql-formatter": "^15.8.2",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },
