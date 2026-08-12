@@ -40,7 +40,20 @@ beforeEach(() => {
   });
 });
 
-describe("FormatPage export menu", () => {
+describe("FormatPage format errors and export menu", () => {
+  it("shows the friendly format error while keeping the parser detail", async () => {
+    const payload = '{"token":"abc"}\n{"token":"def"}';
+    const snapshot: WorkspaceSnapshot = { kind: "format", text: payload, format: "json", sourceName: "demo.json" };
+
+    render(<FormatPage snapshot={snapshot} />);
+    await waitFor(() => expect((screen.getByRole("textbox", { name: /报文编辑器/ }) as HTMLTextAreaElement).value).toBe(payload));
+
+    fireEvent.click(screen.getByRole("button", { name: "格式化" }));
+
+    expect(notifyMock).toHaveBeenCalledWith("格式有问题 好好检查一下 老表", "error");
+    expect(screen.getByText("EndOfFileExpected")).toBeTruthy();
+  });
+
   it("supports exporting the current payload as a TXT file", async () => {
     const payload = '{"token":"abc"}';
     const snapshot: WorkspaceSnapshot = { kind: "format", text: payload, format: "json", sourceName: "demo.json" };
@@ -68,7 +81,7 @@ describe("FormatPage export menu", () => {
 
     await waitFor(() => expect(saveTextFileMock).toHaveBeenCalledWith("worktools-message.json", payload));
     expect(saveTextFileMock).toHaveBeenCalledTimes(1);
-    expect(notifyMock).toHaveBeenCalledWith("格式无效，已按原文导出，未应用脱敏", "info");
+    expect(notifyMock).toHaveBeenCalledWith("格式有问题 好好检查一下 老表", "info");
   });
 
   it("exports JSON with EndOfFileExpected even when masking is enabled", async () => {

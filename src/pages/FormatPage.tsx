@@ -15,6 +15,8 @@ import { getWorkspaceSaveMessage, saveWorkspaceTarget, useWorkspaceSaveShortcut 
 import { translate as t } from "../i18n";
 import { DocumentTreeView } from "./format/DocumentTreeView";
 
+const FORMAT_ISSUE_MESSAGE = "格式有问题 好好检查一下 老表";
+
 const SAMPLE = `{
   "requestId": "req-20260803-001",
   "hotel": { "id": 1024, "name": "示例酒店" },
@@ -83,7 +85,7 @@ export function FormatPage({ snapshot, workspaceId, active = false, onTitleChang
   const applyFormat = (minify: boolean) => {
     if (resolved === "text") { notify(t("纯文本无需格式化"), "info"); return; }
     const result = formatDocument(text, resolved, minify);
-    if (!result.parsed.valid) { notify(result.parsed.issues[0]?.message ?? t("报文格式无效"), "error"); setTab("problems"); return; }
+    if (!result.parsed.valid) { notify(t(FORMAT_ISSUE_MESSAGE), "error"); setTab("problems"); return; }
     setText(result.text); notify(minify ? t("已压缩报文") : t("已格式化报文"));
   };
   const applyEscapeTransform = (action: "escape" | "unescape" | "remove") => {
@@ -99,7 +101,7 @@ export function FormatPage({ snapshot, workspaceId, active = false, onTitleChang
   const getExportContent = () => canMaskExport ? maskDocumentText(text, resolved, maskRules) : text;
   const notifyExportSuccess = (message: string) => {
     if (maskExport && resolved !== "text" && !parsed.valid) {
-      notify(t("格式无效，已按原文导出，未应用脱敏"), "info");
+      notify(t(FORMAT_ISSUE_MESSAGE), "info");
       return;
     }
     notify(message);
