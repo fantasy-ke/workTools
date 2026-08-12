@@ -35,18 +35,21 @@ export function looksLikeSql(text: string): boolean {
 }
 
 export function normalizeSql(text: string): SqlNormalizationResult {
-  try {
-    return {
-      valid: true,
-      text: format(text, {
-        language: "sql",
-        tabWidth: 2,
-        useTabs: false,
-        keywordCase: "upper",
-        linesBetweenQueries: 1,
-      }).trim(),
-    };
-  } catch {
-    return { valid: false, text };
+  for (const language of ["sql", "transactsql"] as const) {
+    try {
+      return {
+        valid: true,
+        text: format(text, {
+          language,
+          tabWidth: 2,
+          useTabs: false,
+          keywordCase: "upper",
+          linesBetweenQueries: 1,
+        }).trim(),
+      };
+    } catch {
+      continue;
+    }
   }
+  return { valid: false, text };
 }

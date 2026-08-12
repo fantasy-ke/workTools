@@ -61,6 +61,46 @@ beforeEach(() => {
 });
 
 describe("DiffPage SQL comparison", () => {
+  it("updates generated panel title suffixes after format detection or selection", async () => {
+    render(<DiffPage />);
+
+    expect(screen.getByText("before.json")).toBeTruthy();
+    expect(screen.getByText("after.json")).toBeTruthy();
+
+    const [leftEditor, rightEditor] = screen.getAllByRole("textbox");
+    fireEvent.change(leftEditor, { target: { value: "SELECT id FROM users;" } });
+    fireEvent.change(rightEditor, { target: { value: "SELECT name FROM users;" } });
+
+    expect(await screen.findByText("before.sql")).toBeTruthy();
+    expect(await screen.findByText("after.sql")).toBeTruthy();
+
+    const formatSelect = screen.getByRole("option", { name: "SQL" }).parentElement as HTMLSelectElement;
+    fireEvent.change(formatSelect, { target: { value: "text" } });
+    expect(await screen.findByText("before.txt")).toBeTruthy();
+    expect(await screen.findByText("after.txt")).toBeTruthy();
+  });
+
+  it("keeps real source file names when the comparison format changes", async () => {
+    const snapshot: WorkspaceSnapshot = {
+      kind: "diff",
+      leftText: "SELECT 1;",
+      rightText: "SELECT 2;",
+      format: "sql",
+      options: { ...DEFAULT_DIFF_OPTIONS },
+      leftName: "original.proc",
+      rightName: "revised.proc",
+    };
+
+    render(<DiffPage snapshot={snapshot} />);
+    await screen.findByDisplayValue("SELECT 1;");
+
+    const formatSelect = screen.getByRole("option", { name: "SQL" }).parentElement as HTMLSelectElement;
+    fireEvent.change(formatSelect, { target: { value: "text" } });
+
+    expect(screen.getByText("original.proc")).toBeTruthy();
+    expect(screen.getByText("revised.proc")).toBeTruthy();
+  });
+
   it("auto-detects SQL, shows the fallback warning, and exports invalid SQL as original text", async () => {
     const leftText = "SELECT 'unterminated";
     const rightText = "SELECT 'closed';";

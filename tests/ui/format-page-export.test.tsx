@@ -41,6 +41,29 @@ beforeEach(() => {
 });
 
 describe("FormatPage format errors and export menu", () => {
+  it("updates the generated panel title for auto-detected and selected formats", async () => {
+    render(<FormatPage />);
+
+    const editor = screen.getByRole("textbox");
+    expect(screen.getByText("\u672a\u547d\u540d.json")).toBeTruthy();
+
+    fireEvent.change(editor, { target: { value: "<root />" } });
+    expect(await screen.findByText("\u672a\u547d\u540d.xml")).toBeTruthy();
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "text" } });
+    expect(await screen.findByText("\u672a\u547d\u540d.txt")).toBeTruthy();
+  });
+
+  it("keeps a real source file name when the selected format changes", async () => {
+    const snapshot: WorkspaceSnapshot = { kind: "format", text: "<root />", format: "xml", sourceName: "payload.data" };
+
+    render(<FormatPage snapshot={snapshot} />);
+    await screen.findByDisplayValue("<root />");
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "json" } });
+    expect(screen.getByText("payload.data")).toBeTruthy();
+  });
+
   it("shows the friendly format error while keeping the parser detail", async () => {
     const payload = '{"token":"abc"}\n{"token":"def"}';
     const snapshot: WorkspaceSnapshot = { kind: "format", text: payload, format: "json", sourceName: "demo.json" };

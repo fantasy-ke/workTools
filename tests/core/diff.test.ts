@@ -36,6 +36,22 @@ describe("diff core", () => {
     expect(result.normalizedLeft).toContain("SELECT");
   });
 
+  it("formats SQL Server stored procedures before comparison", () => {
+    const left = `ALTER PROCEDURE [dbo].[sync_order]
+  @status INT
+AS
+BEGIN
+  SELECT id FROM orders WHERE status = @status;
+END;`;
+    const right = left.replace("SELECT id", "SELECT id, name");
+
+    const result = compareDocuments(left, right, "sql", DEFAULT_DIFF_OPTIONS);
+
+    expect(result.leftValid && result.rightValid).toBe(true);
+    expect(result.normalizedLeft).toContain("ALTER PROCEDURE [dbo].[sync_order]");
+    expect(result.changes.length).toBeGreaterThan(0);
+  });
+
   it("finds changed SQL values after normalization", () => {
     const result = compareDocuments(
       "SELECT id FROM users WHERE id = 1;",
