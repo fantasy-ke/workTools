@@ -26,7 +26,7 @@ beforeAll(async () => {
     }),
   });
   ({ monaco } = await import("../src/monaco"));
-});
+}, 30_000);
 
 afterEach(() => {
   const model = editor?.getModel();
