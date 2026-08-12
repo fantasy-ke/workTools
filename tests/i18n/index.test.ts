@@ -15,5 +15,7 @@ describe("i18n", () => {
     expect(translateForLanguage("双击可新建多个标签", "en-US")).toBe("Double-click for more tabs");
     expect(translateForLanguage("格式无效，已按原文导出，未应用脱敏", "en-US")).toBe("Invalid format; exported the original text without masking");
     expect(translateForLanguage("至少一侧 SQL 无法格式化，已退回原文对比", "en-US")).toBe("At least one SQL input could not be formatted; original-text comparison was used");
+    expect(translateForLanguage("字符串长度", "en-US")).toBe("String Length");
+    expect(translateForLanguage("中文字符", "en-US")).toBe("Chinese Characters");
   });
 });

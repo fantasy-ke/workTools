@@ -1,4 +1,4 @@
-export type ViewId = "home" | "format" | "diff" | "config" | "cron" | "batch" | "workspaces" | "help" | "settings";
+export type ViewId = "home" | "format" | "diff" | "config" | "cron" | "string-length" | "batch" | "workspaces" | "help" | "settings";
 export type DocumentFormat = "auto" | "json" | "xml" | "text";
 export type DiffDocumentFormat = DocumentFormat | "sql";
 export type ResolvedFormat = Exclude<DiffDocumentFormat, "auto">;

@@ -15,6 +15,7 @@ import {
   Menu,
   Minus,
   Search,
+  Ruler,
   Settings,
   ShieldCheck,
   Square,
@@ -56,6 +57,7 @@ const FormatPage = lazyPage("format", async () => ({ default: (await import("./p
 const DiffPage = lazyPage("diff", async () => ({ default: (await import("./pages/DiffPage")).DiffPage }));
 const ConfigPage = lazyPage("config", async () => ({ default: (await import("./pages/ConfigPage")).ConfigPage }));
 const CronPage = lazyPage("cron", async () => ({ default: (await import("./pages/CronPage")).CronPage }));
+const StringLengthPage = lazyPage("string-length", async () => ({ default: (await import("./pages/StringLengthPage")).StringLengthPage }));
 const BatchPage = lazyPage("batch", async () => ({ default: (await import("./pages/BatchPage")).BatchPage }));
 const WorkspacesPage = lazyPage("workspaces", async () => ({ default: (await import("./pages/WorkspacesPage")).WorkspacesPage }));
 const HelpPage = lazyPage("help", async () => ({ default: (await import("./pages/HelpPage")).HelpPage }));
@@ -68,6 +70,7 @@ function createViews(): Array<{ id: ViewId; label: string; icon: React.ReactNode
   { id: "diff", label: t("对比"), icon: <GitCompareArrows />, section: "tools" },
   { id: "config", label: t("配置处理"), icon: <FileCog />, section: "tools" },
   { id: "cron", label: t("Cron 工具"), icon: <CalendarClock />, section: "tools" },
+  { id: "string-length", label: t("字符串长度"), icon: <Ruler />, section: "tools" },
   { id: "batch", label: t("批量对比"), icon: <Files />, section: "tools" },
   { id: "workspaces", label: t("工作区"), icon: <FolderKanban />, section: "library" },
   { id: "help", label: t("帮助"), icon: <CircleHelp />, section: "library" },
@@ -344,8 +347,10 @@ export default function App() {
       }
       if (event.key === "Escape") setPaletteOpen(false);
       if (event.altKey && /^[1-9]$/.test(event.key)) {
+        const target = views[Number(event.key) - 1];
+        if (!target) return;
         event.preventDefault();
-        navigate(views[Number(event.key) - 1].id);
+        navigate(target.id);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -366,6 +371,7 @@ export default function App() {
     if (tab.view === "diff") return <DiffPage snapshot={tab.snapshot} workspaceId={tab.workspaceId} active={activeTabId === tab.id} onTitleChange={(name) => updateTabName(tab.id, name)} onWorkspaceSaved={(workspace) => updateTabWorkspace(tab.id, workspace)} />;
     if (tab.view === "config") return <ConfigPage active={activeTabId === tab.id} />;
     if (tab.view === "cron") return <CronPage snapshot={tab.snapshot} workspaceId={tab.workspaceId} active={activeTabId === tab.id} onWorkspaceSaved={(workspace) => updateTabWorkspace(tab.id, workspace)} />;
+    if (tab.view === "string-length") return <StringLengthPage />;
     if (tab.view === "batch") return <BatchPage />;
     if (tab.view === "workspaces") return <WorkspacesPage onOpen={openWorkspace} />;
     if (tab.view === "help") return <HelpPage />;
@@ -542,11 +548,11 @@ export default function App() {
               <kbd>Esc</kbd>
             </div>
             <div className="palette-results">
-              {commands.map((command, index) => (
+              {commands.map((command) => (
                 <button key={command.id} onClick={() => { navigate(command.id); setPaletteOpen(false); setPaletteSearch(""); }}>
                   <span>{command.icon}</span>
                   <div><strong>{t("打开")} {command.label}</strong><small>{command.section === "tools" ? t("工作工具") : t("资料库与设置")}</small></div>
-                  <kbd>Alt {index + 1}</kbd>
+                  {views.indexOf(command) < 9 && <kbd>Alt {views.indexOf(command) + 1}</kbd>}
                 </button>
               ))}
             </div>
