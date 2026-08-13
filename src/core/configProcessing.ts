@@ -146,27 +146,35 @@ function splitPath(key: string): { segments: string[]; separator: ConfigPathSepa
   return { segments, separator };
 }
 
+function isArrayIndex(segment: string) {
+  return /^(?:0|[1-9]\d*)$/.test(segment) && Number(segment) <= 4_294_967_294;
+}
+
 function assignPath(target: Record<string, unknown>, key: string, value: unknown) {
   const { segments } = splitPath(key);
-  let current = target;
+  let current: Record<string, unknown> | unknown[] = target;
 
   segments.forEach((segment, index) => {
+    const currentKey = Array.isArray(current) && isArrayIndex(segment) ? Number(segment) : segment;
+    if (Array.isArray(current) && typeof currentKey !== "number") throw new Error(`配置路径发生冲突：${key}`);
+
     const last = index === segments.length - 1;
     if (last) {
-      if (Object.prototype.hasOwnProperty.call(current, segment)) throw new Error(`配置键重复：${key}`);
-      current[segment] = value;
+      if (Object.prototype.hasOwnProperty.call(current, currentKey)) throw new Error(`配置键重复：${key}`);
+      current[currentKey as never] = value as never;
       return;
     }
 
-    const existing = current[segment];
+    const nextIsArray = isArrayIndex(segments[index + 1]);
+    const existing = current[currentKey as never] as unknown;
     if (existing === undefined) {
-      const child: Record<string, unknown> = {};
-      current[segment] = child;
+      const child: Record<string, unknown> | unknown[] = nextIsArray ? [] : {};
+      current[currentKey as never] = child as never;
       current = child;
       return;
     }
-    if (!existing || typeof existing !== "object" || Array.isArray(existing)) throw new Error(`配置路径发生冲突：${key}`);
-    current = existing as Record<string, unknown>;
+    if (!existing || typeof existing !== "object" || Array.isArray(existing) !== nextIsArray) throw new Error(`配置路径发生冲突：${key}`);
+    current = existing as Record<string, unknown> | unknown[];
   });
 }
 
@@ -199,7 +207,12 @@ export function apolloToJson(text: string) {
 }
 
 function flattenJson(value: unknown, path: string[], separator: ConfigPathSeparator, output: Assignment[]) {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
+  if (Array.isArray(value)) {
+    if (!value.length && path.length) output.push({ key: path.join(separator), value: "[]" });
+    value.forEach((child, index) => flattenJson(child, [...path, String(index)], separator, output));
+    return;
+  }
+  if (value && typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>);
     if (!entries.length && path.length) output.push({ key: path.join(separator), value: "{}" });
     entries.forEach(([key, child]) => {
@@ -219,7 +232,7 @@ function serializeApolloValue(value: unknown) {
     if (value.startsWith("{") || value.startsWith("[")) {
       try { structured = typeof JSON.parse(value) === "object"; } catch { /* 普通字符串无需额外处理。 */ }
     }
-    if (!value || /^\s|\s$/.test(value) || /[\r\n]|\s+=|^["']|["']$|^(?:true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)$/.test(value) || structured) return JSON.stringify(value);
+    if (!value || /^\s|\s$/.test(value) || /[\r\n]|\s+=|^["']|["']$/.test(value) || structured) return JSON.stringify(value);
     return value;
   }
   if (value === null || typeof value === "number" || typeof value === "boolean") return String(value);
@@ -232,7 +245,7 @@ export function jsonToApollo(text: string, separator: ConfigPathSeparator = ":")
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("JSON 根节点必须是对象");
   const assignments: Assignment[] = [];
   flattenJson(value, [], separator, assignments);
-  return { text: assignments.map(({ key, value: item }) => `${key} = ${item}`).join("\n"), entryCount: assignments.length };
+  return { text: assignments.map(({ key, value: item }) => `${key}=${item}`).join("\n"), entryCount: assignments.length };
 }
 
 export function decodeDelimiterToken(value: string) {

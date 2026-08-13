@@ -24,11 +24,77 @@ describe("config processing core", () => {
     expect(parseApolloConfig("Url: https://example.test/path?a=1").data).toEqual({ Url: "https://example.test/path?a=1" });
   });
 
-  it("converts nested JSON back to Apollo without losing arrays", () => {
-    const result = jsonToApollo('{"CITHotelSell":{"Enabled":true,"Codes":[1,2],"Literal":"001"}}', ":");
-    expect(result.text).toBe('CITHotelSell:Enabled = true\nCITHotelSell:Codes = [1,2]\nCITHotelSell:Literal = "001"');
-    expect(jsonToApollo('{"A":{"B":1}}', ".").text).toBe("A.B = 1");
-    expect(jsonToApollo('{"Value":"[1,2]"}').text).toBe('Value = "[1,2]"');
+  it("converts nested JSON arrays into indexed Apollo paths", () => {
+    const input = JSON.stringify({
+      Pkfare: {
+        SearchPriceTimeout: 2500,
+        PreCheckTimeout: 5000,
+        SupplierBookingMinTime: 120000,
+        Accounts: [
+          {
+            SaleChannel: 239,
+            ApiKey: "test-api-key=",
+            Secret: "test-secret",
+            Version: "1",
+            Currency: "USD",
+          },
+          {
+            SaleChannel: 491,
+            ApiKey: "test-api-key=",
+            Secret: "test-secret",
+            Version: "1",
+            Currency: "USD",
+          },
+        ],
+      },
+    });
+
+    const result = jsonToApollo(input, ":");
+
+    expect(result.text).toBe([
+      "Pkfare:SearchPriceTimeout=2500",
+      "Pkfare:PreCheckTimeout=5000",
+      "Pkfare:SupplierBookingMinTime=120000",
+      "Pkfare:Accounts:0:SaleChannel=239",
+      "Pkfare:Accounts:0:ApiKey=test-api-key=",
+      "Pkfare:Accounts:0:Secret=test-secret",
+      "Pkfare:Accounts:0:Version=1",
+      "Pkfare:Accounts:0:Currency=USD",
+      "Pkfare:Accounts:1:SaleChannel=491",
+      "Pkfare:Accounts:1:ApiKey=test-api-key=",
+      "Pkfare:Accounts:1:Secret=test-secret",
+      "Pkfare:Accounts:1:Version=1",
+      "Pkfare:Accounts:1:Currency=USD",
+    ].join("\n"));
+    expect(result.entryCount).toBe(13);
+    expect(apolloToJson(result.text).data).toEqual({
+      Pkfare: {
+        SearchPriceTimeout: 2500,
+        PreCheckTimeout: 5000,
+        SupplierBookingMinTime: 120000,
+        Accounts: [
+          {
+            SaleChannel: 239,
+            ApiKey: "test-api-key=",
+            Secret: "test-secret",
+            Version: 1,
+            Currency: "USD",
+          },
+          {
+            SaleChannel: 491,
+            ApiKey: "test-api-key=",
+            Secret: "test-secret",
+            Version: 1,
+            Currency: "USD",
+          },
+        ],
+      },
+    });
+  });
+
+  it("supports dotted paths and preserves structured-looking strings", () => {
+    expect(jsonToApollo('{"A":{"B":1}}', ".").text).toBe("A.B=1");
+    expect(jsonToApollo('{"Value":"[1,2]"}').text).toBe('Value="[1,2]"');
     expect(() => jsonToApollo('{"A:B":1}')).toThrow("JSON 字段名包含层级分隔符");
     expect(() => jsonToApollo('{"A.B":1}')).toThrow("JSON 字段名包含层级分隔符");
   });
