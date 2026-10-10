@@ -1,4 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { syncWorkspaceToLocalDirectory } = vi.hoisted(() => ({
+  syncWorkspaceToLocalDirectory: vi.fn(async () => ({ status: "not-configured" as const })),
+}));
+vi.mock("../../src/platform/workspaceSync", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../src/platform/workspaceSync")>();
+  return { ...original, syncWorkspaceToLocalDirectory };
+});
+
 import { db } from "../../src/storage/db";
 import { useAppStore } from "../../src/store/appStore";
 import type { WorkspaceRecord } from "../../src/types";
@@ -17,6 +26,7 @@ const workspace: WorkspaceRecord = {
 
 describe("workspace rename", () => {
   beforeEach(() => {
+    syncWorkspaceToLocalDirectory.mockClear();
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-12T08:00:00.000Z"));
     useAppStore.setState({ workspaces: [workspace] });

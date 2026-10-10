@@ -2,6 +2,12 @@
 
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { syncWorkspaceToLocalDirectory } = vi.hoisted(() => ({
+  syncWorkspaceToLocalDirectory: vi.fn(async () => ({ status: "not-configured" as const })),
+}));
+vi.mock("../../src/platform/workspaceSync", () => ({ syncWorkspaceToLocalDirectory }));
+
 import { saveWorkspaceTarget, useWorkspaceSaveShortcut } from "../../src/hooks/useWorkspaceSaveShortcut";
 import type { WorkspaceRecord, WorkspaceSnapshot } from "../../src/types";
 
@@ -39,7 +45,8 @@ describe("useWorkspaceSaveShortcut", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  it("prompts only on first save and updates the same workspace afterward", async () => {
+  it("prompts only on first save, updates the same workspace, and syncs each save to a file", async () => {
+    syncWorkspaceToLocalDirectory.mockClear();
     const firstSnapshot: WorkspaceSnapshot = { kind: "format", text: "first", format: "json", sourceName: "demo.json" };
     const secondSnapshot: WorkspaceSnapshot = { kind: "format", text: "second", format: "json", sourceName: "demo.json" };
     const record: WorkspaceRecord = {
@@ -74,5 +81,11 @@ describe("useWorkspaceSaveShortcut", () => {
     expect(workspaceId).toBe("workspace-1");
     expect(requestName).toHaveBeenCalledOnce();
     expect(updateWorkspace).toHaveBeenCalledWith("workspace-1", secondSnapshot, false);
+    expect(syncWorkspaceToLocalDirectory).toHaveBeenNthCalledWith(1, record);
+    expect(syncWorkspaceToLocalDirectory).toHaveBeenNthCalledWith(2, {
+      ...record,
+      snapshot: secondSnapshot,
+      updatedAt: "2026-08-04T00:01:00.000Z",
+    });
   });
 });

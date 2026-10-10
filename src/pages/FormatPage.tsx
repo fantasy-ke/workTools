@@ -139,7 +139,6 @@ export function FormatPage({ snapshot, workspaceId, active = false, onTitleChang
       workspaceId: workspaceIdRef.current,
       snapshot: { kind: "format", text, format, sourceName },
       sensitiveMode: maskExport,
-      syncToLocalFile: settings.syncWorkspaceToLocalFile,
       requestName: () => window.prompt(t("工作区名称"), sourceName.replace(/\.[^.]+$/, "")),
       createWorkspace: saveWorkspace,
       updateWorkspace,

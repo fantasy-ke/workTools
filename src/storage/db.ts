@@ -21,7 +21,6 @@ export const DEFAULT_SETTINGS: WorktoolsSettings = {
   gpuAcceleration: true,
   temporaryByDefault: true,
   rememberRecentFiles: true,
-  syncWorkspaceToLocalFile: false,
   maxLiveBytes: 5 * 1024 * 1024,
   defaultDiffOptions: { ...DEFAULT_DIFF_OPTIONS },
 };
@@ -39,7 +38,9 @@ interface SettingsRow { id: "settings"; value: WorktoolsSettings }
 export interface LocalWorkspaceSyncRow {
   id: "workspace-directory";
   directoryName: string;
-  directoryHandle: FileSystemDirectoryHandle;
+  directoryHandle?: FileSystemDirectoryHandle;
+  directoryPath?: string;
+  initialized?: boolean;
 }
 
 export interface WorkspaceTabSessionRow {
@@ -122,12 +123,15 @@ export async function loadLocalWorkspaceSync(): Promise<LocalWorkspaceSyncRow | 
   return db.localWorkspaceSync.get("workspace-directory");
 }
 
-export async function saveLocalWorkspaceSync(directoryHandle: FileSystemDirectoryHandle): Promise<void> {
-  await db.localWorkspaceSync.put({
-    id: "workspace-directory",
-    directoryName: directoryHandle.name,
-    directoryHandle,
-  });
+export async function saveLocalWorkspaceSync(
+  directory: Pick<LocalWorkspaceSyncRow, "directoryName" | "directoryHandle" | "directoryPath">,
+): Promise<void> {
+  await db.localWorkspaceSync.put({ id: "workspace-directory", ...directory, initialized: false });
+}
+
+export async function markLocalWorkspaceSyncInitialized(initialized: boolean): Promise<void> {
+  const row = await loadLocalWorkspaceSync();
+  if (row) await db.localWorkspaceSync.put({ ...row, initialized });
 }
 
 export async function clearLocalWorkspaceSync(): Promise<void> {

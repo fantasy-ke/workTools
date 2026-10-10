@@ -41,7 +41,6 @@ export function CronPage({ snapshot, workspaceId, active = false, onWorkspaceSav
     const result = await saveWorkspaceTarget({
       workspaceId: workspaceIdRef.current,
       snapshot: { kind: "cron", dialect, expression, timezone },
-      syncToLocalFile: settings.syncWorkspaceToLocalFile,
       requestName: () => window.prompt(t("工作区名称"), `Cron ${expression}`),
       createWorkspace: saveWorkspace,
       updateWorkspace,

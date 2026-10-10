@@ -11,7 +11,7 @@ describe("i18n", () => {
     expect(translateForLanguage("3 处差异", "en-US")).toBe("3 differences");
     expect(translateForLanguage("配置处理", "en-US")).toBe("Configuration Processing");
     expect(translateForLanguage("已替换 5 处符号", "en-US")).toBe("Replaced 5 delimiters");
-    expect(translateForLanguage("保存工作区时同步到本地文件", "en-US")).toBe("Sync workspaces to a local file when saving");
+    expect(translateForLanguage("选择本地目录后，每个工作区会保存为独立的 .apiwork 文件，并在启动时从该目录读取", "en-US")).toBe("After choosing a local folder, each workspace is stored in its own .apiwork file and loaded from that folder at startup");
     expect(translateForLanguage("双击可新建多个标签", "en-US")).toBe("Double-click for more tabs");
     expect(translateForLanguage("格式有问题 好好检查一下 老表", "en-US")).toBe("The format has issues. Check it carefully, buddy.");
     expect(translateForLanguage("至少一侧 SQL 无法格式化，已退回原文对比", "en-US")).toBe("At least one SQL input could not be formatted; original-text comparison was used");

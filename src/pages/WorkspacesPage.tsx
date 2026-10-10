@@ -52,6 +52,12 @@ export function WorkspacesPage({ onOpen, onWorkspaceRenamed }: WorkspacesPagePro
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useState<string | null>(null);
   const [renamingWorkspaceName, setRenamingWorkspaceName] = useState("");
   const normalizedSearch = search.toLocaleLowerCase();
+  const notifyWorkspaceFileError = () => {
+    const error = useAppStore.getState().workspaceFileError;
+    if (!error) return false;
+    notify(t(error), "error");
+    return true;
+  };
   const filtered = useMemo(
     () => [...state.workspaces]
       .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt))
@@ -85,7 +91,7 @@ export function WorkspacesPage({ onOpen, onWorkspaceRenamed }: WorkspacesPagePro
     try {
       const pkg = importWorktoolsPackage(file.bytes);
       await state.importPackage(pkg);
-      notify(t(`已导入 ${pkg.workspaces.length} 个工作区`));
+      if (!notifyWorkspaceFileError()) notify(t(`已导入 ${pkg.workspaces.length} 个工作区`));
     } catch (error) {
       notify(error instanceof Error ? error.message : t("工作包导入失败"), "error");
     }
@@ -114,30 +120,30 @@ export function WorkspacesPage({ onOpen, onWorkspaceRenamed }: WorkspacesPagePro
     const renamed = await state.renameWorkspace(workspace.id, trimmedName);
     onWorkspaceRenamed(renamed);
     cancelRenamingWorkspace();
-    notify(t("工作区已重命名"));
+    if (!notifyWorkspaceFileError()) notify(t("工作区已重命名"));
   };
 
   const moveToTrash = async (workspace: WorkspaceRecord) => {
     await state.deleteWorkspace(workspace.id);
-    notify(t(`“${workspace.name}”已移入回收站`));
+    if (!notifyWorkspaceFileError()) notify(t(`“${workspace.name}”已移入回收站`));
   };
 
   const restoreWorkspace = async (workspace: WorkspaceRecord) => {
     await state.restoreWorkspace(workspace.id);
-    notify(t(`“${workspace.name}”已恢复`));
+    if (!notifyWorkspaceFileError()) notify(t(`“${workspace.name}”已恢复`));
   };
 
   const permanentlyDeleteWorkspace = async (workspace: WorkspaceRecord) => {
     if (!window.confirm(t(`永久删除工作区“${workspace.name}”？此操作无法撤销。`))) return;
     await state.permanentlyDeleteWorkspace(workspace.id);
-    notify(t(`“${workspace.name}”已永久删除`));
+    if (!notifyWorkspaceFileError()) notify(t(`“${workspace.name}”已永久删除`));
   };
 
   const emptyTrash = async () => {
     if (!state.recycledWorkspaces.length) return;
     if (!window.confirm(t(`清空回收站中的 ${state.recycledWorkspaces.length} 个工作区？此操作无法撤销。`))) return;
     await state.emptyWorkspaceTrash();
-    notify(t("回收站已清空"));
+    if (!notifyWorkspaceFileError()) notify(t("回收站已清空"));
   };
 
   const tabLabel = (item: Tab) => {

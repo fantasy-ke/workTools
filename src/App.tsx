@@ -165,6 +165,7 @@ export default function App() {
   const initialize = useAppStore((state) => state.initialize);
   const hydrated = useAppStore((state) => state.hydrated);
   const storageError = useAppStore((state) => state.storageError);
+  const workspaceFileError = useAppStore((state) => state.workspaceFileError);
   const setView = useAppStore((state) => state.setView);
   const settings = useAppStore((state) => state.settings);
   const tauriRuntime = isTauriRuntime();
@@ -564,6 +565,7 @@ export default function App() {
         ) : (
           <Suspense fallback={<div className="app-loading"><img className="brand-mark" src="/worktools.svg" alt="" aria-hidden="true" /><strong>{t("正在加载工具…")}</strong></div>}>
             {storageError && <div className="storage-warning">{t("本地数据库不可用：")}{storageError}{t("。临时工具仍可使用，但保存功能可能失败。")}</div>}
+            {workspaceFileError && <div className="storage-warning">{t(workspaceFileError)}</div>}
             <div className="workspace-views">
               {openTabs.map((tab) => (
                 <section

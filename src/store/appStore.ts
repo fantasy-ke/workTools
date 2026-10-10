@@ -18,15 +18,24 @@ import {
   DEFAULT_SETTINGS,
   clearAllData,
   db,
+  loadLocalWorkspaceSync,
   loadPersistedData,
   replacePersistedData,
   saveSettings,
 } from "../storage/db";
+import {
+  clearLocalWorkspaceFiles,
+  deleteLocalWorkspaceFile,
+  loadLocalWorkspaceRecords,
+  syncAllWorkspacesToLocalDirectory,
+  syncWorkspaceToLocalDirectory,
+} from "../platform/workspaceSync";
 
 interface AppState extends AppPersistedData {
   recycledWorkspaces: WorkspaceRecord[];
   hydrated: boolean;
   storageError?: string;
+  workspaceFileError?: string;
   view: ViewId;
   maskRules: MaskRule[];
   initialize: () => Promise<void>;
@@ -62,7 +71,28 @@ const empty: AppPersistedData = {
   settings: DEFAULT_SETTINGS,
 };
 
-export const useAppStore = create<AppState>((set, get) => ({
+function mergeWorkspaceRecords(existing: WorkspaceRecord[], fromFiles: WorkspaceRecord[]): WorkspaceRecord[] {
+  const merged = new Map(existing.map((workspace) => [workspace.id, workspace]));
+  for (const workspace of fromFiles) {
+    const current = merged.get(workspace.id);
+    if (!current || workspace.updatedAt >= current.updatedAt) merged.set(workspace.id, workspace);
+  }
+  return [...merged.values()];
+}
+
+export const useAppStore = create<AppState>((set, get) => {
+  const syncWorkspaceFile = async (workspace: WorkspaceRecord) => {
+    set({ workspaceFileError: undefined });
+    const result = await syncWorkspaceToLocalDirectory(workspace);
+    if (result.status === "error" || result.status === "permission-denied" || result.status === "unsupported") {
+      set({ workspaceFileError: "本地工作区文件同步失败" });
+    } else if (result.status === "synced") {
+      set({ workspaceFileError: undefined });
+    }
+    return result;
+  };
+
+  return ({
   ...empty,
   recycledWorkspaces: [],
   hydrated: false,
@@ -71,7 +101,36 @@ export const useAppStore = create<AppState>((set, get) => ({
   initialize: async () => {
     try {
       const data = await loadPersistedData();
-      set({ ...data, hydrated: true, storageError: undefined });
+      const directory = await loadLocalWorkspaceSync();
+      let workspaceRecords = [...data.workspaces, ...data.recycledWorkspaces];
+      let workspaceFileError: string | undefined;
+
+      if (directory) {
+        try {
+          const fileRecords = await loadLocalWorkspaceRecords();
+          workspaceRecords = directory.initialized
+            ? fileRecords
+            : mergeWorkspaceRecords(workspaceRecords, fileRecords);
+          await db.transaction("rw", db.workspaces, async () => {
+            await db.workspaces.clear();
+            if (workspaceRecords.length) await db.workspaces.bulkPut(workspaceRecords);
+          });
+
+          if (!directory.initialized) {
+            const result = await syncAllWorkspacesToLocalDirectory(workspaceRecords);
+            if (result.status !== "synced") workspaceFileError = "本地工作区文件初始化失败";
+          }
+        } catch {
+          workspaceFileError = "读取本地工作区文件失败";
+          workspaceRecords = [...data.workspaces, ...data.recycledWorkspaces];
+        }
+      }
+
+      const workspaces = workspaceRecords.filter((workspace) => !workspace.deletedAt)
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+      const recycledWorkspaces = workspaceRecords.filter((workspace) => Boolean(workspace.deletedAt))
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+      set({ ...data, workspaces, recycledWorkspaces, hydrated: true, storageError: undefined, workspaceFileError });
     } catch (error) {
       set({ hydrated: true, storageError: error instanceof Error ? error.message : "本地数据库初始化失败" });
     }
@@ -124,7 +183,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       updatedAt: new Date().toISOString(),
     };
     await db.workspaces.put(record);
-    set({ workspaces: [record, ...get().workspaces.filter((workspace) => workspace.id !== id)] });
+    set({ workspaces: [record, ...get().workspaces.filter((workspace) => workspace.id !== id) ] });
+    await syncWorkspaceFile(record);
     return record;
   },
   deleteWorkspace: async (id) => {
@@ -137,6 +197,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       workspaces: get().workspaces.filter((workspace) => workspace.id !== id),
       recycledWorkspaces: [recycled, ...get().recycledWorkspaces],
     });
+    await syncWorkspaceFile(recycled);
   },
   restoreWorkspace: async (id) => {
     const item = get().recycledWorkspaces.find((workspace) => workspace.id === id);
@@ -147,13 +208,28 @@ export const useAppStore = create<AppState>((set, get) => ({
       workspaces: [restored, ...get().workspaces],
       recycledWorkspaces: get().recycledWorkspaces.filter((workspace) => workspace.id !== id),
     });
+    await syncWorkspaceFile(restored);
   },
   permanentlyDeleteWorkspace: async (id) => {
+    set({ workspaceFileError: undefined });
+    const result = await deleteLocalWorkspaceFile(id);
+    if (result.status === "error" || result.status === "permission-denied" || result.status === "unsupported") {
+      set({ workspaceFileError: result.status === "unsupported" ? "当前入口无法访问所选本地工作区目录" : "本地工作区文件删除失败" });
+      return;
+    }
     await db.workspaces.delete(id);
     set({ recycledWorkspaces: get().recycledWorkspaces.filter((workspace) => workspace.id !== id) });
   },
   emptyWorkspaceTrash: async () => {
+    set({ workspaceFileError: undefined });
     const ids = get().recycledWorkspaces.map((workspace) => workspace.id);
+    for (const id of ids) {
+      const result = await deleteLocalWorkspaceFile(id);
+      if (result.status === "error" || result.status === "permission-denied" || result.status === "unsupported") {
+        set({ workspaceFileError: result.status === "unsupported" ? "当前入口无法访问所选本地工作区目录" : "本地工作区文件删除失败" });
+        return;
+      }
+    }
     await db.workspaces.bulkDelete(ids);
     set({ recycledWorkspaces: [] });
   },
@@ -163,6 +239,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const updated = { ...item, pinned: !item.pinned, updatedAt: new Date().toISOString() };
     await db.workspaces.put(updated);
     set({ workspaces: get().workspaces.map((workspace) => workspace.id === id ? updated : workspace) });
+    await syncWorkspaceFile(updated);
   },
   saveRuleTemplate: async (name, options) => {
     const template: RuleTemplate = { id: createId("rules"), name: name.trim() || "未命名规则", createdAt: new Date().toISOString(), options };
@@ -212,11 +289,23 @@ export const useAppStore = create<AppState>((set, get) => ({
       recentFiles: pkg.recentFiles,
     };
     await replacePersistedData(data);
-    set({ ...data, recycledWorkspaces: [] });
+    const result = await syncAllWorkspacesToLocalDirectory(data.workspaces, true);
+    set({
+      ...data,
+      recycledWorkspaces: [],
+      workspaceFileError: result.status === "error" || result.status === "permission-denied" || result.status === "unsupported"
+        ? "本地工作区文件导入同步失败"
+        : undefined,
+    });
   },
   clearData: async () => {
+    const result = await clearLocalWorkspaceFiles();
+    const workspaceFileError = result.status === "error" || result.status === "permission-denied" || result.status === "unsupported"
+      ? "应用数据已清空，但本地工作区文件未能删除，请手动检查所选目录"
+      : undefined;
     await clearAllData();
     await saveSettings(DEFAULT_SETTINGS);
-    set({ ...empty, recycledWorkspaces: [], maskRules: DEFAULT_MASK_RULES });
+    set({ ...empty, recycledWorkspaces: [], maskRules: DEFAULT_MASK_RULES, workspaceFileError });
   },
-}));
+  });
+});

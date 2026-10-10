@@ -169,7 +169,6 @@ export interface WorktoolsSettings {
   gpuAcceleration: boolean;
   temporaryByDefault: boolean;
   rememberRecentFiles: boolean;
-  syncWorkspaceToLocalFile: boolean;
   maxLiveBytes: number;
   defaultDiffOptions: DiffOptions;
 }
