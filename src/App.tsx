@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import type { ViewId, WorkspaceRecord, WorkspaceSnapshot } from "./types";
 import { useAppStore } from "./store/appStore";
+import { loadWorkspaceTabSession, saveWorkspaceTabSession } from "./storage/db";
 import { isTauriRuntime } from "./platform/files";
 import { createId } from "./utils";
 import "./App.css";
@@ -170,6 +171,7 @@ export default function App() {
   const views = useMemo(createViews, [settings.language]);
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([createOpenTab("home")]);
   const [activeTabId, setActiveTabId] = useState("home");
+  const [workspaceTabsRestored, setWorkspaceTabsRestored] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteSearch, setPaletteSearch] = useState("");
   const [navOpen, setNavOpen] = useState(false);
@@ -302,6 +304,50 @@ export default function App() {
   }, [openTabs, selectTab]);
 
   useEffect(() => { void initialize(); }, [initialize]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const session = await loadWorkspaceTabSession();
+        if (cancelled) return;
+
+        const workspaces = useAppStore.getState().workspaces;
+        const restoredTabs = (session?.workspaceIds ?? []).flatMap((workspaceId) => {
+          const workspace = workspaces.find((item) => item.id === workspaceId);
+          if (!workspace) return [];
+          const view: ViewId = workspace.snapshot.kind === "format" ? "format" : workspace.snapshot.kind === "diff" ? "diff" : "cron";
+          return [createOpenTab(view, workspace.name, cloneSnapshot(workspace.snapshot), workspace.id)];
+        });
+
+        if (restoredTabs.length) {
+          const tabs = [createOpenTab("home"), ...restoredTabs];
+          const activeTab = restoredTabs.find((tab) => tab.workspaceId === session?.activeWorkspaceId) ?? tabs[0];
+          setOpenTabs(tabs);
+          setActiveTabId(activeTab.id);
+          setView(activeTab.view);
+        }
+        setWorkspaceTabsRestored(true);
+      } catch {
+        // Keep the app usable if tab-session metadata is unavailable; saved workspaces remain in the library.
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [hydrated, setView]);
+
+  useEffect(() => {
+    if (!hydrated || !workspaceTabsRestored) return;
+    const savedWorkspaceIds = new Set(useAppStore.getState().workspaces.map((workspace) => workspace.id));
+    const workspaceIds = openTabs.flatMap((tab) => tab.workspaceId && savedWorkspaceIds.has(tab.workspaceId) ? [tab.workspaceId] : []);
+    const currentWorkspaceId = openTabs.find((tab) => tab.id === activeTabId)?.workspaceId;
+    const activeWorkspaceId = currentWorkspaceId && savedWorkspaceIds.has(currentWorkspaceId) ? currentWorkspaceId : undefined;
+    void saveWorkspaceTabSession({ workspaceIds, activeWorkspaceId }).catch((error: unknown) => {
+      console.error("Failed to persist open workspace tabs", error);
+    });
+  }, [activeTabId, hydrated, openTabs, workspaceTabsRestored]);
 
   useEffect(() => () => {
     if (navClickTimer.current !== null) window.clearTimeout(navClickTimer.current);

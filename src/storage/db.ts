@@ -42,6 +42,12 @@ export interface LocalWorkspaceSyncRow {
   directoryHandle: FileSystemDirectoryHandle;
 }
 
+export interface WorkspaceTabSessionRow {
+  id: "open-workspaces";
+  workspaceIds: string[];
+  activeWorkspaceId?: string;
+}
+
 class WorktoolsDb extends Dexie {
   workspaces!: Table<WorkspaceRecord, string>;
   ruleTemplates!: Table<RuleTemplate, string>;
@@ -50,6 +56,7 @@ class WorktoolsDb extends Dexie {
   recentFiles!: Table<RecentFile, string>;
   settings!: Table<SettingsRow, string>;
   localWorkspaceSync!: Table<LocalWorkspaceSyncRow, string>;
+  workspaceTabSessions!: Table<WorkspaceTabSessionRow, string>;
 
   constructor() {
     super("worktools-db");
@@ -69,6 +76,16 @@ class WorktoolsDb extends Dexie {
       recentFiles: "id, openedAt, name",
       settings: "id",
       localWorkspaceSync: "id",
+    });
+    this.version(3).stores({
+      workspaces: "id, type, pinned, updatedAt",
+      ruleTemplates: "id, createdAt",
+      maskTemplates: "id, createdAt",
+      baselines: "id, format, createdAt",
+      recentFiles: "id, openedAt, name",
+      settings: "id",
+      localWorkspaceSync: "id",
+      workspaceTabSessions: "id",
     });
   }
 }
@@ -91,6 +108,14 @@ export async function loadPersistedData(): Promise<AppPersistedData & { recycled
 
 export async function saveSettings(value: WorktoolsSettings): Promise<void> {
   await db.settings.put({ id: "settings", value });
+}
+
+export async function loadWorkspaceTabSession(): Promise<WorkspaceTabSessionRow | undefined> {
+  return db.workspaceTabSessions.get("open-workspaces");
+}
+
+export async function saveWorkspaceTabSession(session: Omit<WorkspaceTabSessionRow, "id">): Promise<void> {
+  await db.workspaceTabSessions.put({ id: "open-workspaces", ...session });
 }
 
 export async function loadLocalWorkspaceSync(): Promise<LocalWorkspaceSyncRow | undefined> {
